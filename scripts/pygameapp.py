@@ -60,6 +60,7 @@ KEY_DOWN = K_s
 KEY_CCW = K_q
 KEY_CW = K_e
 KEY_SLOWROT = K_LSHIFT
+KEY_SLOWROT2 = K_RSHIFT
 
 KEY_GOAL = K_TAB
 
@@ -219,7 +220,7 @@ class App:
 
         if keys[KEY_COMMAND]:
             rotationSpeed = 0
-        elif keys[KEY_SLOWROT]:
+        elif keys[KEY_SLOWROT] or keys[K_SLOWROT2]:
             rotationSpeed = ROT_SPEED_KEYSLOW
         else:
             rotationSpeed = ROT_SPEED_KEY
