@@ -1,6 +1,7 @@
 import pygame, os, math, time
 from pygame.locals import *
 from pygame import gfxdraw
+from _linalg import *
 
 
 # Loading resources
@@ -121,6 +122,28 @@ def blitPlusHelper(image: pygame.Surface, background: pygame.Surface, modes: tup
 
     return left, top, right, bottom
 
+
+# Anti-aliased thick lines
+
+# def aaLine(surface, p1, p2, w, color):
+#     r = w / 2.0
+#     disp = (p2[0] - p1[0], p2[1] - p1[1])
+#     vertices = (
+#         (p1[0] - disp[1] * r, p1[1] + disp[0] * r),
+#         (p1[0] + disp[1] * r, p1[1] - disp[0] * r),
+#         (p2[0] + disp[1] * r, p2[1] - disp[0] * r),
+#         (p2[0] - disp[1] * r, p2[1] + disp[0] * r)
+#     )
+#     gfxdraw.aapolygon(surface, vertices, color)
+#     gfxdraw.filled_polygon(surface, vertices, color)
+
+def aaLine(surface, p1, p2, r, color):
+    if p1 == p2: return
+    normal = scaleV(normalize((p1[1] - p2[1], p2[0] - p1[0])), r)
+    pygame.draw.aaline(surface, color, addV(p1, normal), addV(p2, normal))
+    pygame.draw.aaline(surface, color, subV(p1, normal), subV(p2, normal))
+    pygame.draw.line(surface, color, p1, p2, r * 2)
+    
 
 # Colors
 

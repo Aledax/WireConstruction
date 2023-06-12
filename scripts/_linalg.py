@@ -48,17 +48,39 @@ def normalize(v: tuple):
 
 def magnitude(v: tuple):
     return math.sqrt(sum([c ** 2 for c in v]))
+def magnitudeSquared(v: tuple):
+    return sum([c ** 2 for c in v])
 
 def dot(v1: tuple, v2: tuple):
     return sum([v1[i] * v2[i] for i in range(len(v1))])
+def cross3(v1: tuple, v2: tuple):
+    return (
+        v1[1] * v2[2] - v1[2] * v2[1],
+        v1[2] * v2[0] - v1[0] * v2[2],
+        v1[0] * v2[1] - v1[1] * v2[0]
+    )
 
 def vectorProj(v: tuple, v_onto: tuple):
     return scaleV(v, dot(v, v_onto) / magnitude(v_onto) ** 2)
 def scalarProj(v: tuple, v_onto: tuple):
     return magnitude(vectorProj(v, v_onto))
 
+def distance(p1: tuple, p2: tuple):
+    return magnitude(subV(p1, p2))
 def distanceSquared(p1: tuple, p2: tuple):
     return sum([(p1[i] - p2[i]) ** 2 for i in range(len(p1))])
+
+
+# 0: Not parallel
+# 1: Parallel, but in opposite directions
+# 2: Parallel, and in the same direction
+def testParallel(v1: tuple, v2: tuple, tolerance: float = 0.0001):
+    if 1 - abs(dot(normalize(v1), normalize(v2))) <= tolerance:
+        if all(v1[i] * v2[i] >= 0 for i in range(len(v1))):
+            return 2
+        else:
+            return 1
+    return 0
 
 # More specific functions
 
