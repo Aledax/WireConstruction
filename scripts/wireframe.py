@@ -1,30 +1,42 @@
 import math, copy, numpy
 from _linalg import *
 
+class Edge:
+
+    defaultColor = (255, 255, 255)
+    defaultRadius = 2
+    defaultDotted = False
+
+    def __init__(self, v1, v2, color = defaultColor, radius = defaultRadius, dotted = defaultDotted):
+        self.v1, self.v2 = v1, v2 # Vertex INDICES, not coordinates
+        self.color, self.radius, self.dotted = color, radius, dotted
+
 class Wireframe:
 
-    def __init__(self, vertices, edges, scale = 1):
+    def __init__(self, vertices, edgeIndices, scale = 1):
         self.scale = scale
 
         # Relative vertices are constant, and are relative to wireframe's center.
         self.localVertices = vertices # Tuple3 list (coordinates)
-        self.edgeIndices = edges # Tuple2 list (vertex indices)
+        self.edges = [Edge(e[0], e[1]) for e in edgeIndices] # Edge list
 
         # A "ghost vertex" is one that does not technically exist in the localVertices array but may be
         # created by the user.
         # It is defined by 2 attributes: (world position, list of edges it touches)
         self.ghostVertices = []
 
-        # Wireframe's local i, j, k in terms of world coordinates
-        self.unitVectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    @property
+    def edgeIndices(self):
+        return [(e.v1, e.v2) for e in self.edges]
+    
+    def removeEdgeByIndices(self, v1, v2):
+        for e in self.edges:
+            if (e.v1 == v1 and e.v2 == v2) or (e.v1 == v2 and e.v2 == v1):
+                self.edges.remove(e)
+                return
 
     def reset(self):
         self.unitVectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-
-    def rotate(self, rotation):
-        for worldAxis in range(3):
-            for localAxis in range(3):
-                self.unitVectors[localAxis] = rotateVector3Axis(self.unitVectors[localAxis], rotation[worldAxis], worldAxis)
 
     def addEdge(self, edge):
         if edge[0] == edge[1]: return
@@ -85,14 +97,14 @@ class Wireframe:
 
                 self.ghostVertices.append((p3, [edge, otherEdge]))
 
-        self.edgeIndices.append(edge)
+        self.edges.append(Edge(*edge))
 
     def removeEdge(self, edge):
         reversedEdge = (edge[1], edge[0])
         if edge in self.edgeIndices:
-            self.edgeIndices.remove(edge)
+            self.removeEdgeByIndices(*edge)
         elif reversedEdge in self.edgeIndices:
-            self.edgeIndices.remove(reversedEdge)
+            self.removeEdgeByIndices(*edge)
 
         # Delete edge data from ghosts that the edge crosses, remove ghosts if necessary
         newGhosts = []
@@ -110,43 +122,53 @@ class Wireframe:
         newVertexId = len(self.localVertices)
         self.localVertices.append(ghost[0])
 
-        newEdgeIndices = []
+        newEdges = []
 
-        # Delete the edge that is getting split
-        for e in self.edgeIndices:
-            re = (e[1], e[0])
-            if e not in ghost[1] and re not in ghost[1]:
-                newEdgeIndices.append(e)
+        # Delete the edges that are getting split
+        for e in self.edges:
+            indices, rindices = (e.v1, e.v2), (e.v2, e.v1)
+            if indices not in ghost[1] and rindices not in ghost[1]:
+                newEdges.append(e)
+            # Update the edges of any other ghosts that have this edge
+            else:
+                for otherG in self.ghostVertices:
+                    if otherG != ghost and (indices in otherG[1] or rindices in otherG[1]):
+                        if indices in otherG[1]: otherG[1].remove(indices)
+                        elif rindices in otherG[1]: otherG[1].remove(rindices)
+
+                        if testParallel(subV(otherG[0], ghost[0]), subV(otherG[0], self.localVertices[e.v1])) == 1:
+                            otherG[1].append((e.v1, newVertexId))
+                        else:
+                            otherG[1].append((e.v2, newVertexId))
 
         # Add the new halved edges
         for e in ghost[1]:
-            newEdgeIndices.append((e[0], newVertexId))
-            newEdgeIndices.append((e[1], newVertexId))
+            newEdges.append(Edge(e[0], newVertexId))
+            newEdges.append(Edge(e[1], newVertexId))
 
-        self.edgeIndices = newEdgeIndices
+        self.edges = newEdges
         self.ghostVertices.pop(gId)
 
     def removeVertex(self, vId):
 
         # Delete edges connected to the vertex
-        for e in copy.deepcopy(self.edgeIndices): # Deep copy due to removeEdge modifying the list
-            if vId in e:
-                self.removeEdge(e)
+        for i in range(len(self.edges) - 1, -1, -1):
+            if vId == self.edges[i].v1 or vId == self.edges[i].v2:
+                self.edges.pop(i)
         
         # Remove the vertex
         self.localVertices.pop(vId)
 
         # Shift the edge indices that are greater than vertex by -1
-        newEdgeIndices = []
-        for e in self.edgeIndices:
-            newEdgeIndices.append((e[0] - 1 if e[0] > vId else e[0], e[1] - 1 if e[1] > vId else e[1]))
-        self.edgeIndices = newEdgeIndices
+        for e in self.edges:
+            e.v1 = e.v1 - 1 if e.v1 > vId else e.v1
+            e.v2 = e.v2 - 1 if e.v2 > vId else e.v2
 
-    def getWorldVertices(self):
-        return [[sum(self.unitVectors[i][axis] * localV[i] for i in range(3)) * self.scale for axis in range(3)] for localV in self.localVertices]
+    def getWorldVertices(self, unitVectors):
+        return [[sum(unitVectors[i][axis] * localV[i] for i in range(3)) * self.scale for axis in range(3)] for localV in self.localVertices]
     
-    def getWorldGhosts(self):
-        return [[sum(self.unitVectors[i][axis] * ghost[0][i] for i in range(3)) * self.scale for axis in range(3)] for ghost in self.ghostVertices]
+    def getWorldGhosts(self, unitVectors):
+        return [[sum(unitVectors[i][axis] * ghost[0][i] for i in range(3)) * self.scale for axis in range(3)] for ghost in self.ghostVertices]
 
 globalScale = 1
 

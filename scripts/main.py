@@ -1,4 +1,4 @@
-import pygame, sys, time
+import pygame, sys, time, copy
 from pygame.locals import *
 from _linalg import *
 from _pygameplus import *
@@ -7,50 +7,90 @@ from wireframe import wireframeFromPreset, numPresets
 # BUGS
 
 # Back shading gets weird after rotating about Z and using the mouse at the same time
+# (Sometimes, ghost vertex detection fails (division by zero in normalize))
 
-# FEATURES FOR 0.3
+# FEATURES FOR 0.3 (Bracket when done)
 
-# Undo
-# Orthographic / Perspective toggle
+# (Undo)
+# (Orthographic / Perspective toggle)
+# (Light / Dark mode toggle)
+# (Debug information toggle)
+# (Vertex depth)
+
+# FEATURES FOR 0.4
+
+# Initial preset rotation
+# Allow creation of vertices at edge midpoints
 # Options for line thickness, color, dotted
-# Light / Dark mode toggle
+# Ability to save and load models as files
+# Menu UI for loading a preset or a model file
 
 WINDOW_SIZE = (700, 700)
 WINDOW_CENTER = roundV(scaleV(WINDOW_SIZE, 0.5))
 
 WINDOW_SURFACE = pygame.display.set_mode(WINDOW_SIZE)
 
+# Keybinds
+
+EDIT_SET_EDGE = K_1
+EDIT_FILL = K_2
+EDIT_DEL_EDGE = K_3
+
+EDIT_GHOST_VERTEX = K_4
+EDIT_MID_VERTEX = K_5
+EDIT_DEL_VERTEX = K_6
+
+COMMAND = K_LCTRL
+
 class App:
+
+    class Subedge:
+        def __init__(self, screenV1, screenV2, worldZ, color, radius):
+            self.screenV1, self.screenV2, self.worldZ, self.color, self.radius = screenV1, screenV2, worldZ, color, radius
+
     def __init__(self):
         self.clock = pygame.time.Clock()
         self.windowSurface = WINDOW_SURFACE
-
-        self.polyIndex = 3
-        self.wireframe = wireframeFromPreset(self.polyIndex)
 
         # Geometric parameters
         self.keyRotationSpeed = 0.05
         self.mouseRotationSpeed = 0.005
         self.eyePos = (0, 0, -10)
         self.screenZ = -5
-        self.zoom = scaleV(WINDOW_SIZE, 0.8)
+        self.perspectiveZoom = scaleV(WINDOW_SIZE, 0.8)
+        self.orthogonalZoom = scaleV(WINDOW_SIZE, 0.4)
 
         # Visual parameters
         self.backgroundColor = (0, 0, 0)
+        self.subedgeLength = 0.05
+        self.subedgeLengthSquared = self.subedgeLength ** 2
+
+        # Toggleables
         self.antialias = True
         self.variableBrightness = True
-        self.subedgeLength = 0.1
-        self.subedgeLengthSquared = self.subedgeLength ** 2
-        self.wireframeColor = (255, 255, 255)
+        self.perspective = True
+        self.darkMode = True
+        self.enableDebug = True
 
         # Mouse input
         self.previousMousePressed = [False, False, False]
         self.previousMousePos = (0, 0)
 
+        # Edge styling
+        self.setEdgeColor = (255, 255, 255)
+        self.setEdgeRadius = 2
+        self.setEdgeDotted = False
+
         # Vertex selection
-        self.vertexSelectionRadiusSquared = 20 ** 2
+        self.vertexSelectionRadiusSquared = 30 ** 2
         self.vertexPositions = []
         self.selectedVertex = -1
+
+        # Wireframe
+        self.wireframeUnitVectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        self.polyIndex = 3
+        self.wireframeStack = [wireframeFromPreset(self.polyIndex)]
+        self.maxUndos = 10
 
         self.loop()
 
@@ -58,20 +98,23 @@ class App:
         while True:
             timer = time.perf_counter()
 
+            wireframe = copy.deepcopy(self.wireframeStack[-1])
+
             # Generating vertex positions
 
-            worldVertices = self.wireframe.getWorldVertices()
-            screenVertices = [self.perspectifyVertex(v) for v in worldVertices]
+            worldVertices = wireframe.getWorldVertices(self.wireframeUnitVectors)
+            screenVertices = [self.worldToScreen(v) for v in worldVertices]
 
-            worldGhosts = self.wireframe.getWorldGhosts()
-            screenGhosts = [self.perspectifyVertex(g) for g in worldGhosts]
+            worldGhosts = wireframe.getWorldGhosts(self.wireframeUnitVectors)
+            screenGhosts = [self.worldToScreen(g) for g in worldGhosts]
 
-            # Generating subedges for rendering
+            # Generating Subedges for rendering
 
-            subedges = [] # A subedge consists of (screen endpoint 1, screen endpoint 2, world z midpoint - used for brightness).
+            subedges = []
 
-            for (v1, v2) in self.wireframe.edgeIndices:
+            for edge in wireframe.edges:
 
+                v1, v2 = edge.v1, edge.v2
                 wv1, wv2 = worldVertices[v1], worldVertices[v2]
                 sv1, sv2 = screenVertices[v1], screenVertices[v2]
 
@@ -89,13 +132,14 @@ class App:
 
                 for step in range(int(subedgeCount)):
                     svNew = addV(svCurrent, svStep)
-                    subedges.append((svCurrent, svNew, zCurrent + zStep * 0.5))
+                    if not edge.dotted or step % 2 == 0:
+                        subedges.append(App.Subedge(svCurrent, svNew, zCurrent + zStep * 0.5, edge.color, edge.radius))
                     zCurrent += zStep
                     svCurrent = svNew
                 
-                subedges.append((svCurrent, sv2, (zCurrent + wv2[2]) * 0.5))
+                subedges.append(App.Subedge(svCurrent, sv2, (zCurrent + wv2[2]) * 0.5, edge.color, edge.radius))
 
-            subedges = sorted(subedges, key = lambda subedge: subedge[2], reverse = True)
+            subedges = sorted(subedges, key = lambda subedge: subedge.worldZ, reverse = True)
 
             # Input
 
@@ -105,37 +149,45 @@ class App:
 
             # Rotation via keys
 
-            if keys[K_LSHIFT]:
+            if keys[COMMAND]:
+                rotationSpeed = 0
+            elif keys[K_LSHIFT]:
                 rotationSpeed = self.keyRotationSpeed / 10
             else:
                 rotationSpeed = self.keyRotationSpeed
 
             if keys[K_w]:
-                self.wireframe.rotate((-rotationSpeed, 0, 0))
+                self.rotate((-rotationSpeed, 0, 0))
             if keys[K_s]:
-                self.wireframe.rotate((rotationSpeed, 0, 0))
+                self.rotate((rotationSpeed, 0, 0))
             if keys[K_a]:
-                self.wireframe.rotate((0, rotationSpeed, 0))
+                self.rotate((0, rotationSpeed, 0))
             if keys[K_d]:
-                self.wireframe.rotate((0, -rotationSpeed, 0))
+                self.rotate((0, -rotationSpeed, 0))
             if keys[K_q]:
-                self.wireframe.rotate((0, 0, -rotationSpeed))
+                self.rotate((0, 0, -rotationSpeed))
             if keys[K_e]:
-                self.wireframe.rotate((0, 0, rotationSpeed))
+                self.rotate((0, 0, rotationSpeed))
 
             # Rotation via mouse
 
             if mousePressed[0] and self.previousMousePressed[0]:
                 mouseHorizontal = mousePos[0] - self.previousMousePos[0]
                 mouseVertical = mousePos[1] - self.previousMousePos[1]
-                self.wireframe.rotate(scaleV((mouseVertical, -mouseHorizontal, 0), self.mouseRotationSpeed))
+                self.rotate(scaleV((mouseVertical, -mouseHorizontal, 0), self.mouseRotationSpeed))
 
-            # Activating editing modes
-            # 1: Adding edges
+            # ACTIVATING EDITING MODES
+
+            # 1: Setting edges (including modifying existing ones)
+            # 3: Modifying ALL edges
             # 2: Removing edges
-            # 3: Adding / Removing vertices
 
-            if keys[K_1] or keys[K_2] or keys[K_3]:
+            # 4: Creating ghost vertices
+            # 5: Creating midpoint vertices (not implemented)
+            # 6: Removing vertices
+
+            # Get the closest vertex to the mouse
+            if keys[EDIT_SET_EDGE] or keys[EDIT_DEL_EDGE] or keys[EDIT_DEL_VERTEX]:
                 closestVertex = -1
                 closestDSquared = -1
                 for i in range(len(worldVertices)):
@@ -149,11 +201,14 @@ class App:
                             closestVertex = i
                             closestDSquared = dSquared
 
-            if not keys[K_1] and not keys[K_2]:
+            # Enable selecting a second vertex?
+            if not keys[EDIT_SET_EDGE] and not keys[EDIT_DEL_EDGE]:
                 self.selectedVertex = -1
 
-            if keys[K_3]:
+            # Get the closest ghost vertex to the mouse
+            if keys[EDIT_GHOST_VERTEX]:
                 closestGhost = -1
+                closestDSquared = -1
                 for i in range(len(worldGhosts)):
                     dSquared = distanceSquared(screenGhosts[i], mousePos)
                     if closestGhost != -1:
@@ -169,111 +224,149 @@ class App:
 
             for event in pygame.event.get():
 
-                # Exiting, debugging, resetting, switching polyhedra, visual preferences
+                # Commands
 
                 if event.type == KEYDOWN:
                     if event.key == K_ESCAPE:
                         pygame.quit()
                         sys.exit()
-                    elif event.key == K_LEFT:
-                        self.cyclePolyhedron(-1)
-                    elif event.key == K_RIGHT:
-                        self.cyclePolyhedron(1)
-                    elif event.key == K_SPACE:
-                        self.wireframe = wireframeFromPreset(self.polyIndex)
-                    if keys[K_LALT]:
-                        if event.key == K_1:
+                    if keys[COMMAND]:
+                        if event.key == K_a:
                             self.antialias = not self.antialias
-                        elif event.key == K_2:
+                        elif event.key == K_b:
                             self.variableBrightness = not self.variableBrightness
+                        elif event.key == K_p:
+                            self.perspective = not self.perspective
+                        elif event.key == K_l:
+                            self.darkMode = not self.darkMode
+                        elif event.key == K_d:
+                            self.enableDebug = not self.enableDebug
+                        elif event.key == K_z:
+                            self.undo()
+                        elif event.key == K_r:
+                            self.updateWireframe(wireframeFromPreset(self.polyIndex))
+                        elif event.key == K_LEFT:
+                            self.cyclePolyhedron(-1)
+                        elif event.key == K_RIGHT:
+                            self.cyclePolyhedron(1)
 
                 # Selecting vertices
 
                 elif event.type == MOUSEBUTTONDOWN:
-                    if keys[K_1]:
+                    if keys[EDIT_SET_EDGE]:
                         if closestVertex != -1 and self.selectedVertex != -1:
-                            self.wireframe.addEdge((self.selectedVertex, closestVertex))
+                            wireframe.addEdge((self.selectedVertex, closestVertex))
+                            self.updateWireframe(wireframe)
                             self.selectedVertex = -1
                         else:
                             self.selectedVertex = closestVertex
-                    elif keys[K_2]:
+                    elif keys[EDIT_DEL_EDGE]:
                         if closestVertex != -1 and self.selectedVertex != -1:
-                            self.wireframe.removeEdge((self.selectedVertex, closestVertex))
+                            wireframe.removeEdge((self.selectedVertex, closestVertex))
+                            self.updateWireframe(wireframe)
                             self.selectedVertex = -1
                         else:
                             self.selectedVertex = closestVertex
-                    elif keys[K_3]:
+                    elif keys[EDIT_GHOST_VERTEX]:
                         if closestGhost != -1:
-                            self.wireframe.materializeGhost(closestGhost)
-                        elif closestVertex != -1:
-                            self.wireframe.removeVertex(closestVertex)
+                            wireframe.materializeGhost(closestGhost)
+                            self.updateWireframe(wireframe)
+                    elif keys[EDIT_DEL_VERTEX]:
+                        if closestVertex != -1:
+                            wireframe.removeVertex(closestVertex)
+                            self.updateWireframe(wireframe)
 
             # Graphics
 
-            self.windowSurface.fill(self.backgroundColor)
+            self.windowSurface.fill(self.flipColor(self.backgroundColor))
 
-            # Render subedges
+            # Draw subedges
 
             for subedge in subedges:
                 if self.antialias:
-                    aaLine(self.windowSurface, subedge[0], subedge[1], 2, scaleV(self.wireframeColor, self.calculateBrightness(subedge[2])))
+                    aaLine(self.windowSurface, subedge.screenV1, subedge.screenV2, subedge.radius, self.flipColor(scaleV(subedge.color, self.edgeBrightness(subedge.worldZ))))
                 else:
-                    pygame.draw.line(self.windowSurface, scaleV(self.wireframeColor, self.calculateBrightness(subedge[2])), subedge[0], subedge[1], 4)
+                    pygame.draw.line(self.windowSurface, self.flipColor(scaleV(subedge.color, self.edgeBrightness(subedge.worldZ))), subedge.screenV1, subedge.screenV2, 2 * subedge.radius)
 
             # Draw vertices
 
-            for i in range(len(worldVertices)):
+            # Normal vertices
+            if keys[EDIT_SET_EDGE] or keys[EDIT_DEL_EDGE] or keys[EDIT_DEL_VERTEX]:
+                for i in range(len(worldVertices)):
 
-                pygameDebug(self.windowSurface, addV(screenVertices[i], (-20, -20)), str(i))
+                    if self.enableDebug: pygameDebug(self.windowSurface, addV(screenVertices[i], (-20, -20)), str(i))
 
-                # Selection highlight
+                    # Selection highlight
+                    
+                    if i == closestVertex:
+                        color = (255, 255, 0)
+                    elif keys[EDIT_SET_EDGE]:
+                        color = (0, 255, 0)
+                    elif keys[EDIT_DEL_EDGE]:
+                        color = (255, 0, 255)
+                    elif keys[EDIT_DEL_VERTEX]:
+                        color = (255, 0, 0)
 
-                if i != self.selectedVertex and not keys[K_1] and not keys[K_2] and not keys[K_3]:
-                    continue
-                
-                if i == self.selectedVertex:
-                    color = (0, 255, 255)
-                elif i == closestVertex:
-                    color = (255, 255, 0)
-                elif keys[K_1]:
-                    color = (0, 255, 0)
-                elif keys[K_2]:
-                    color = (255, 0, 255)
-                else:
-                    color = (255, 0, 0)
+                    pygame.draw.circle(self.windowSurface, color, screenVertices[i], self.vertexRadius(worldVertices[i][2]))
 
-                pygame.draw.circle(self.windowSurface, color, screenVertices[i], 8)
-
-            if keys[K_3]:
+            # Ghost veretices
+            if keys[EDIT_GHOST_VERTEX]:
                 for i in range(len(worldGhosts)):
 
-                    pygameDebug(self.windowSurface, addV(screenGhosts[i], (-20, -20)), str(i), (255, 255, 0))
+                    if self.enableDebug: pygameDebug(self.windowSurface, addV(screenGhosts[i], (-20, -20)), str(i), (255, 255, 0))
 
                     if i == closestGhost:
                         color = (255, 255, 125)
                     else:
                         color = (125, 125, 125)
 
-                    pygame.draw.circle(self.windowSurface, color, screenGhosts[i], 8)
+                    pygame.draw.circle(self.windowSurface, color, screenGhosts[i], self.vertexRadius(worldGhosts[i][2]))
 
+            # Selected vertex
+            if self.selectedVertex != -1:
+                pygame.draw.circle(self.windowSurface, (0, 255, 255), screenVertices[self.selectedVertex], self.vertexRadius(worldVertices[self.selectedVertex][2]))
+
+            # Previous input
             self.previousMousePressed = mousePressed
             self.previousMousePos = mousePos
 
-            pygameDebug(self.windowSurface, (10, 10), "Entire frame time: " + str(round((time.perf_counter() - timer) * 60, 2)))
+            if self.enableDebug: pygameDebug(self.windowSurface, (10, 10), "Entire frame time: " + str(round((time.perf_counter() - timer) * 60, 2)))
 
             pygame.display.update()
             self.clock.tick(60)
 
+    def rotate(self, rotation):
+        for worldAxis in range(3):
+            for localAxis in range(3):
+                self.wireframeUnitVectors[localAxis] = rotateVector3Axis(self.wireframeUnitVectors[localAxis], rotation[worldAxis], worldAxis)
+
+    def updateWireframe(self, newWireframe):
+        if len(self.wireframeStack) == self.maxUndos + 1: self.wireframeStack.pop(0)
+        self.wireframeStack.append(newWireframe)
+
+    def undo(self):
+        if len(self.wireframeStack) > 1: self.wireframeStack.pop(-1)
+
     def cyclePolyhedron(self, change):
         self.polyIndex = (self.polyIndex + change) % numPresets
-        self.wireframe = wireframeFromPreset(self.polyIndex)
+        self.updateWireframe(wireframeFromPreset(self.polyIndex))
 
-    def perspectifyVertex(self, v):
-        return addV(mulV(addV(self.eyePos[0:2], scaleV(subV(v[0:2], self.eyePos[0:2]), (self.screenZ - self.eyePos[2]) / (v[2] - self.eyePos[2]))), self.zoom), WINDOW_CENTER)
-    
-    def calculateBrightness(self, z):
+    def worldToScreen(self, v):
+        if self.perspective:
+            return addV(mulV(addV(self.eyePos[0:2], scaleV(subV(v[0:2], self.eyePos[0:2]), (self.screenZ - self.eyePos[2]) / (v[2] - self.eyePos[2]))), self.perspectiveZoom), WINDOW_CENTER)
+        else:
+            return addV(mulV(addV(self.eyePos[0:2], v[0:2]), self.orthogonalZoom), WINDOW_CENTER)
+
+    def edgeBrightness(self, z):
         if not self.variableBrightness: return 1
         return min(max(0.625 - z, 0) + 0.3, 1)
+    
+    def vertexRadius(self, z):
+        return 10 - z * 5
+    
+    def flipColor(self, color):
+        if self.darkMode: return color
+        return subV((255, 255, 255), color)
 
 
 if __name__ == '__main__':
