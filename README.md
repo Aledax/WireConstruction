@@ -52,5 +52,5 @@ Commands (hold `LCtrl` and press):
 - `r`: Reset the current level
 - `z`: Undo (up to 10 times)
 - `s`: Save what you currently have as a new level (enter name in command prompt)
-- `o`: Open an existing level; levels created by me are in `resources\wireframes\custom`
+- `o`: Open an existing level (enter name in command prompt); levels created by me are in `resources\wireframes\custom`. The name of a level is the file name minus the `.txt`. A few good starter levels to try are `rampcorner`, `squareyo`, and `gemstone`. The puzzle pictured above is named `weird_d20`.
 - `q`: Quit the application
