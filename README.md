@@ -12,8 +12,8 @@ The images below show an example of the start and finish of a level, the start b
 
 &nbsp;  
 
-<img src="https://github.com/Aledax/WireConstruction/assets/89650652/335367e8-838f-4668-b08c-c307b205dc15" width="300" height="300">
-<img src="https://github.com/Aledax/WireConstruction/assets/89650652/a3376d1e-5006-4da3-acab-15bd793d02cc" width="300" height="300">
+<img src="https://github.com/Aledax/WireConstruction/assets/89650652/7d102db6-2969-4774-8dca-c8c77316b420" width="300" height="300">
+<img src="https://github.com/Aledax/WireConstruction/assets/89650652/90a4a217-d168-4bcc-89fa-9da723a326d2" width="300" height="300">
 
 &nbsp;  
 
