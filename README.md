@@ -2,7 +2,7 @@
 
 A unique and challenging puzzle game born from my passion for puzzle games and geometry. I created this purely for fun.
 
-To play the game, make sure you have Python 3, PyGame, and ModernGL installed, and run `main.py` from `0.9\scripts`. Controls are listed at the bottom of this document.
+To play the game, make sure you have Python 3, PyGame, and ModernGL installed, and run `main.py` from `\scripts`. Controls are listed at the bottom of this document.
 
 ## Overview
 
@@ -47,5 +47,5 @@ Commands (hold `LCtrl` and press):
 - `r`: Reset the current level
 - `z`: Undo (up to 10 times)
 - `s`: Save what you currently have as a new level (enter name in command prompt)
-- `o`: Open an existing level (enter name in command prompt)
+- `o`: Open an existing level (enter file name in command prompt without the `.txt`); levels created by me are in `\resources\wireframes\custom`
 - `q`: Quit the application
