@@ -7,18 +7,23 @@ from wireframe import *
 
 # BUGS
 
-# Parallel test is weird for the dodecahedron
-# Rarely get divisions by zero in parallel test
-
-# FEATURES FOR 0.5
-
-# (Highlight edges to be deleted when clearing a vertex)
-# (Functionality for saving and loading wireframes as files)
-# (More aesthetically pleasing background)
+# (Parallel test is weird for the dodecahedron)
+# - LESSONS:
+#  - DO NOT try to equate weird calculations to zero. Instead, check if they are below a very low TOLERANCE.
+#  - Checking whether two line segments intersect or not only requires the calculation of TWO path cross products.
+#  - Instead of getting numpy to solve a system of linear equations entirely, you only need one of the constants, which
+#    can easily be computed algebraically, with a bit of hand-written work first.
 
 # FEATURES FOR 0.6
 
-# Button widget
+# (Toggle fancy background)
+# (Custom edges)
+# (Editing existing edges)
+# (Two modes of edge selection)
+# (Button widget)
+
+# FEATURES FOR 0.7
+
 # Enterbox widget
 # Main menu screen
 # Loading wireframe screen (preset or file)
@@ -58,21 +63,19 @@ KEY_SLOWROT = K_LSHIFT
 
 KEY_PRESET = K_TAB
 
-KEY_COMMAND = K_LCTRL
-
 KEY_ADDEDGE = K_1
 KEY_REMEDGE = K_2
+KEY_EDTEDGE = K_3
 
-KEY_CLRVERTEX = K_3
 KEY_REMVERTEX = K_4
 
-KEY_EDGESTYLE = K_5
-KEY_FILLSTYLE = K_6
+KEY_COMMAND = K_LCTRL
 
 KEY_TOG_AA = K_a
 KEY_TOG_DEPTH = K_d
 KEY_TOG_VIEW = K_v
 KEY_TOG_LIGHT = K_l
+KEY_TOG_GRADIENT = K_g
 KEY_TOG_DEBUG = K_0
 
 KEY_UNDO = K_z
@@ -96,22 +99,42 @@ class App:
         self.edgeDepth = True
         self.perspective = True
         self.darkTheme = True
-        self.enableDebug = True
+        self.gradientBG = True
+        self.enableDebug = False
 
         # Background
         self.backgroundSurfaces = [
-            self.verticalGradient(WINDOW_SIZE, (255, 255, 255), (255, 245, 230)),
-            self.verticalGradient(WINDOW_SIZE, (0, 0, 51), (19, 0, 26))
+            [
+                pygame.Surface(WINDOW_SIZE),
+                pygame.Surface(WINDOW_SIZE)
+            ],
+            [
+                self.verticalGradient(WINDOW_SIZE, (255, 255, 255), (255, 245, 230)),
+                self.verticalGradient(WINDOW_SIZE, (0, 0, 51), (19, 0, 26))
+            ]
         ]
+        self.backgroundSurfaces[0][0].fill((255, 255, 255))
+        self.backgroundSurfaces[0][1].fill((0, 0, 0))
 
         # Previous mouse state
         self.previousMousePos = (0, 0)
 
         # For selecting an edge (via two vertices)
         self.selectedV = -1
+        self.dragSelect = True
+        self.panning = False
 
         # For adding edges
-        self.edgeStyle = Wireframe.defaultStyle
+        self.edgeStyle = copy.deepcopy(Wireframe.defaultStyle)
+
+        # Buttons
+        self.buttonEdgeWhite = CircleButton(30, 200, 20, self.setEdgeStyle, ("color", (255, 255, 255)))
+        self.buttonEdgeRed = CircleButton(30, 260, 20, self.setEdgeStyle, ("color", (255, 0, 0)))
+        self.buttonEdgeYellow = CircleButton(30, 320, 20, self.setEdgeStyle, ("color", (255, 255, 0)))
+        self.buttonEdgeBlue = CircleButton(30, 380, 20, self.setEdgeStyle, ("color", (0, 0, 255)))
+        self.buttonEdgeSolid = CircleButton(30, 440, 20, self.setEdgeStyle, ("dotted", False))
+        self.buttonEdgeDotted = CircleButton(30, 500, 20, self.setEdgeStyle, ("dotted", True))
+        self.buttons = [self.buttonEdgeWhite, self.buttonEdgeRed, self.buttonEdgeYellow, self.buttonEdgeBlue, self.buttonEdgeSolid, self.buttonEdgeDotted]
 
         # For rotation
         self.wireframeUnitVectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
@@ -120,6 +143,9 @@ class App:
         self.wireframeStack = [wireframeFromPreset(1)]
 
         while True: self.loop()
+
+    def setEdgeStyle(self, parameter, value):
+        self.edgeStyle[parameter] = value
 
     def verticalGradient(self, size, colorTop, colorBot):
         surface = pygame.Surface(size)
@@ -233,17 +259,16 @@ class App:
 
         # Closest vertex
 
-        if keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_REMVERTEX]:
-            closestV = -1  # Closest vertex so far
+        closestV = -1
+        if (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_REMVERTEX] or keys[KEY_EDTEDGE]) and not self.panning:
             closestDS = -1 # Shortest distance squared so far
             
             for i in range(len(worldVertices)):
 
                 # Ignore conditions
-                if i == self.selectedV: continue
                 if self.selectedV != -1:
                     if keys[KEY_ADDEDGE] and {self.selectedV, i} in wireframe.edgeLinks: continue
-                    elif keys[KEY_REMEDGE] and {self.selectedV, i} not in wireframe.edgeLinks: continue
+                    elif (keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]) and {self.selectedV, i} not in wireframe.edgeLinks: continue
 
                 # Calculate distance
                 ds = distanceSquared(screenVertices[i], mousePos)
@@ -256,12 +281,14 @@ class App:
                         closestV = i
                         closestDS = ds
 
-        if not (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE]):
+        # Drop selected vertex
+
+        if not (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]):
             self.selectedV = -1
 
         # Background
 
-        self.windowSurface.blit(self.backgroundSurfaces[self.darkTheme], (0, 0))
+        self.windowSurface.blit(self.backgroundSurfaces[self.gradientBG][self.darkTheme], (0, 0))
 
         # Draw subedges
 
@@ -285,12 +312,17 @@ class App:
                 elif keys[KEY_REMEDGE]:
                     color = (255, 0, 0)
                     radius = 2
+                elif keys[KEY_EDTEDGE]:
+                    color = (255, 255, 0)
+                    radius = 2
             else:
                 pos = mousePos
                 if keys[KEY_ADDEDGE]:
                     color = (200, 255, 200)
                 elif keys[KEY_REMEDGE]:
                     color = (255, 200, 200)
+                elif keys[KEY_EDTEDGE]:
+                    color = (255, 255, 200)
                 radius = 1
             
             if self.antialias: aaLine(self.windowSurface, screenVertices[self.selectedV], pos, radius, color)
@@ -300,11 +332,12 @@ class App:
 
         if not keys[KEY_PRESET]:
             for v in sorted(range(len(worldVertices)), key = lambda v: worldVertices[v][2], reverse = True):
-                if v != self.selectedV and (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_REMVERTEX]):
+                if v != self.selectedV and (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_REMVERTEX] or keys[KEY_EDTEDGE]):
                     if v == closestV: color = (255, 255, 0)
                     elif keys[KEY_ADDEDGE]: color = (0, 255, 0)
                     elif keys[KEY_REMEDGE]: color = (255, 0, 255)
                     elif keys[KEY_REMVERTEX]: color = (255, 0, 0)
+                    elif keys[KEY_EDTEDGE]: color = (255, 125, 0)
                     pygame.draw.circle(self.windowSurface, color, screenVertices[v], self.vertexRadius(worldVertices[v][2]))
             if self.selectedV != -1:
                 pygame.draw.circle(self.windowSurface, (255, 0, 255), screenVertices[self.selectedV], self.vertexRadius(worldVertices[self.selectedV][2]))
@@ -312,6 +345,13 @@ class App:
         if self.enableDebug:
             for v in range(len(worldVertices)):
                 pygameDebug(self.windowSurface, addV(screenVertices[v], (-30, -30)), str(v))
+
+        # Draw buttons
+
+        pygame.draw.circle(self.windowSurface, (255, 255, 255), self.buttonEdgeWhite.pos, 20)
+        pygame.draw.circle(self.windowSurface, (255, 0, 0), self.buttonEdgeRed.pos, 20)
+        pygame.draw.circle(self.windowSurface, (255, 255, 0), self.buttonEdgeYellow.pos, 20)
+        pygame.draw.circle(self.windowSurface, (0, 0, 255), self.buttonEdgeBlue.pos, 20)
 
         # Events
 
@@ -331,6 +371,8 @@ class App:
                     self.perspective = not self.perspective
                 elif event.key == KEY_TOG_LIGHT:
                     self.darkTheme = not self.darkTheme
+                elif event.key == KEY_TOG_GRADIENT:
+                    self.gradientBG = not self.gradientBG
                 elif event.key == KEY_TOG_DEBUG:
                     self.enableDebug = not self.enableDebug
                 elif event.key == KEY_UNDO:
@@ -354,24 +396,58 @@ class App:
                     if i > 0 and i <= numPresets:
                         self.wireframeStack.append(wireframeFromPreset(i - 1))
             
-            # Vertex Selection
+            # Vertex Selection and Button Presses
 
             elif event.type == MOUSEBUTTONDOWN and event.button == 1:
-                if keys[KEY_ADDEDGE] or keys[KEY_REMEDGE]:
-                    self.selectedV = closestV
+                if closestV == -1:
+                    self.panning = True
+                if (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]) and self.selectedV == -1:
+                    if closestV != -1:
+                        self.selectedV = closestV
+                        self.draggingV = True
+
+                for button in self.buttons:
+                    if button.checkHover(mousePos):
+                        button.execute()
             
             elif event.type == MOUSEBUTTONUP and event.button == 1:
-                if keys[KEY_ADDEDGE] and self.selectedV != -1 and closestV != -1:
-                    wireframe.addEdge(self.selectedV, closestV, self.edgeStyle)
-                    self.wireframeStack.append(wireframe)
-                elif keys[KEY_REMEDGE] and self.selectedV != -1 and closestV != -1:
-                    wireframe.removeEdge({self.selectedV, closestV})
-                    self.wireframeStack.append(wireframe)
-                elif keys[KEY_REMVERTEX] and closestV != -1:
-                    wireframe.clearVertex(closestV)
-                    self.wireframeStack.append(wireframe)
-                    closestV = -1
-                self.selectedV = -1
+                if self.panning:
+                    self.panning = False
+                elif (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]):
+
+                    success = False
+
+                    if self.dragSelect:
+                        if self.selectedV != -1:
+                            if closestV != -1 and closestV != self.selectedV:
+                                success = True
+                            else:
+                                self.dragSelect = True
+                    else:
+                        if closestV != -1 and closestV != self.selectedV:
+                            success = True
+                            self.dragSelect = True
+                        else:
+                            self.selectedV = -1
+                            self.dragSelect = True
+
+                    if success:
+                        if keys[KEY_ADDEDGE]:
+                            wireframe.addEdge(self.selectedV, closestV, self.edgeStyle)
+                            self.wireframeStack.append(wireframe)
+                        elif keys[KEY_REMEDGE]:
+                            wireframe.removeEdge({self.selectedV, closestV})
+                            self.wireframeStack.append(wireframe)
+                        elif keys[KEY_EDTEDGE]:
+                            wireframe.editEdge({self.selectedV, closestV}, self.edgeStyle)
+                            self.wireframeStack.append(wireframe)
+                        self.selectedV = -1
+
+                elif keys[KEY_REMVERTEX]:
+                    if closestV != -1:
+                        wireframe.clearVertex(closestV)
+                        self.wireframeStack.append(wireframe)
+                        self.selectedV = -1
 
         # Cap undos
 

@@ -1,7 +1,9 @@
-import math, copy, numpy
+import math, copy
 from _linalg import *
 
 class Wireframe:
+
+    tolerance = 0.0001
 
     defaultStyle = {
         "radius": 2,
@@ -49,8 +51,7 @@ class Wireframe:
 
         # Parallel check
         vp, ev1p, ev2p = (self.vertices[thisV].localPosition for thisV in [v] + list(evs))
-        print("Parallel test for ", v, ", ", tuple(evs), ": ", testParallel(subV(vp, ev1p), subV(vp, ev2p)))
-        return testParallel(subV(vp, ev1p), subV(vp, ev2p)) == 1
+        return testParallel(subV(vp, ev1p), subV(vp, ev2p), Wireframe.tolerance) == 1
 
     # Returns the point of intersection if they cross and None otherwise
     def edgeEdgeCrossCheck(self, evs1, evs2):
@@ -58,29 +59,45 @@ class Wireframe:
         if not evs1.isdisjoint(evs2): return False
 
         # Calculate cross products
-        path = [self.vertices[v].localPosition for v in [v for pair in zip(list(evs1), list(evs2)) for v in pair]]
-        crosses = [cross3(subV(path[c], path[(c+3)%4]), subV(path[(c+1)%4], path[c])) for c in range(1, 4)]
+        levs1, levs2 = list(evs1), list(evs2)
+        path = [self.vertices[v].localPosition for v in [levs1[0], levs2[0], levs1[1], levs2[1]]]
+        c1 = cross3(subV(path[1], path[0]), subV(path[2], path[1]))
+        c2 = cross3(subV(path[3], path[2]), subV(path[0], path[3]))
         
         # Cancel if linearly dependent
-        if any(magnitude(c) == 0 for c in crosses): return None
+        if magnitudeSquared(c1) < Wireframe.tolerance or magnitudeSquared(c2) < Wireframe.tolerance: return None
+
+        #print("Edges", evs1, "and", evs2, "are linearly dependent - calculating coplanar")
+
         # Cancel if 4 points are not coplanar
-        if testParallel(crosses[0], crosses[1]) != 2 or testParallel(crosses[1], crosses[2]) != 2: return None
+        if testParallel(c1, c2, Wireframe.tolerance) != 2:
+            #print("Edges", evs1, "and", evs2, "are not coplanar, the result of the test is", testParallel(c1, c2))
+            return None
         
+        #print("Edges", evs1, "and", evs2, "are coplanar - calculating intersection")
+
         # Calculate intersection
-        p1, p2 = path[0:2]
-        v1, v2 = subV(path[2], path[0]), subV(path[3], path[1])
-        try:
-            s, t = numpy.linalg.solve([[v1[0], -v2[0]], [v1[1], -v2[1]]], [p2[0] - p1[0], p2[1] - p1[1]])
-        except:
-            try:
-                s, t = numpy.linalg.solve([[v1[0], -v2[0]], [v1[2], -v2[2]]], [p2[0] - p1[0], p2[2] - p1[2]])
-            except:
-                s, t = numpy.linalg.solve([[v1[1], -v2[1]], [v1[2], -v2[2]]], [p2[1] - p1[1], p2[2] - p1[2]])
-        intersection = addV(p1, scaleV(v1, s))
+        ap, bp, ar, br = path[0], path[1], subV(path[2], path[0]), subV(path[3], path[1])
+        denominator = ar[0]*br[1]-br[0]*ar[1]
+        #print("First denominator:", denominator)
+        if abs(denominator) > Wireframe.tolerance:
+            s = ((ap[1]-bp[1])*br[0]-(ap[0]-bp[0])*br[1])/denominator
+        else:
+            denominator = ar[1]*br[2]-br[1]*ar[2]
+            #print("Second denominator:", denominator)
+            if abs(denominator) > Wireframe.tolerance:
+                s = ((ap[2]-bp[2])*br[1]-(ap[1]-bp[1])*br[2])/denominator
+            else:
+                denominator = ar[2]*br[0]-br[2]*ar[0]
+                #print("Third denominator:", denominator)
+                s = ((ap[0]-bp[0])*br[2]-(ap[2]-bp[2])*br[0])/denominator
+        intersection = addV(ap, scaleV(ar, s))
         
         # Cancel if intersection doesn't lie on both edges
-        print("Intersection check: ", evs1, evs2)
-        if testParallel(subV(intersection, path[0]), subV(intersection, path[2])) != 1 or testParallel(subV(intersection, path[1]), subV(intersection, path[3])) != 1: return None
+        result1, result2 = testParallel(subV(intersection, path[0]), subV(intersection, path[2]), Wireframe.tolerance), testParallel(subV(intersection, path[1]), subV(intersection, path[3]), Wireframe.tolerance)
+        if result1 != 1 or result2 != 1: return None
+
+        #print("Edges", evs1, "and", evs2, "are confirmed to have an intersection")
         
         # Confirmed intersection
         return intersection
@@ -91,7 +108,7 @@ class Wireframe:
     def removeEdge(self, e):
         # Check e's type
         if isinstance(e, set):
-            print("Preparing to remove edge ", tuple(e))
+            #print("Preparing to remove edge ", tuple(e))
             # e is a set; Check if evs actually exists
             evs = e
             if evs not in self.edgeLinks:
@@ -99,7 +116,7 @@ class Wireframe:
                 for v in range(len(self.vertices)):
                     if self.vertexEdgeCrossCheck(v, evs):
                         # Crosses a vertex; Recursive call
-                        print("Found intersecting vertex ", v)
+                        #print("Found intersecting vertex ", v)
                         for thisV in evs:
                             self.removeEdge(thisV, v)
                         return
@@ -109,7 +126,7 @@ class Wireframe:
                 e = self.edgeLinks.index(e)
 
         # e exists.
-        print("Removing edge ", tuple(self.edgeLinks[e]))
+        #print("Removing edge ", tuple(self.edgeLinks[e]))
         # Remove edge links from linked vertices
         for v in self.edgeLinks[e]:
             self.vertexLinks[v].discard(e)
@@ -148,7 +165,7 @@ class Wireframe:
         # Can't make a duplicate edge
         if {v1, v2} in self.edgeLinks: return
 
-        print("Preparing to add edge ", (v1, v2))
+        #print("Preparing to add edge ", (v1, v2))
 
         # Intersection check:
         # 1. If the edge crosses a vertex, call this function recursively
@@ -159,7 +176,7 @@ class Wireframe:
                 # Cross check
                 if self.vertexEdgeCrossCheck(v, {v1, v2}):
                     # If True: Recursive call, return
-                    print("Found intersection with vertex ", v)
+                    #print("Found intersection with vertex ", v)
                     self.addEdge(v, v1, style)
                     self.addEdge(v, v2, style)
                     return
@@ -170,7 +187,7 @@ class Wireframe:
                 # Cross check
                 intersection = self.edgeEdgeCrossCheck(evs, {v1, v2})
                 if intersection:
-                    print("Found intersection with edge ", tuple(evs))
+                    #print("Found intersection with edge ", tuple(evs))
                     # If True:
                     # Remove crossing edge
                     otherStyle = self.edges[e].style
@@ -187,12 +204,17 @@ class Wireframe:
                     return
             
         # No crosses at all
-        print("Adding edge ", (v1, v2))
+        #print("Adding edge ", (v1, v2))
         newE = len(self.edges)
-        self.edges.append(Wireframe.Edge(newE, style))
+        self.edges.append(Wireframe.Edge(newE, copy.deepcopy(style)))
         self.edgeLinks.append({v1, v2})
         for v in {v1, v2}:
             self.vertexLinks[v].add(newE)
+
+    def editEdge(self, e, style):
+        if (isinstance(e, set)):
+            e = self.edgeLinks.index(e)
+        self.edges[e].style = copy.deepcopy(style)
 
 d1 = 1 / math.sqrt(3)
 tetrahedronVertices = [

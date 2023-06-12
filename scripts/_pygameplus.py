@@ -144,3 +144,40 @@ def colorMultiply(color: tuple, factor: float):
 
 def colorLighten(color: tuple, factor: float):
     return tuple([comp + (255 - comp) * factor for comp in color])
+
+
+# Widgets
+
+class Button:
+    def __init__(self, function, args):
+        self.function = function
+        self.args = args
+    
+    def checkHover(self, mousePos):
+        return False
+    
+    def render(self):
+        return
+
+    def execute(self):
+        self.function(*self.args)
+
+class RectButton(Button):
+    def __init__(self, rect, function, args):
+        super().__init__(function, args)
+        self.rect = rect
+
+    def checkHover(self, mousePos):
+        return mousePos[0] >= self.rect[0] and mousePos[1] >= self.rect[1] and mousePos[0] <= self.rect[0] + self.rect[2] and mousePos[1] <= self.rect[1] + self.rect[3]
+
+class CircleButton(Button):
+    def __init__(self, x, y, r, function, args):
+        super().__init__(function, args)
+        self.x, self.y, self.r = x, y, r
+
+    def checkHover(self, mousePos):
+        return distanceSquared(mousePos, (self.x, self.y)) <= math.pow(self.r, 2)
+    
+    @property
+    def pos(self):
+        return (self.x, self.y)

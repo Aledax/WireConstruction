@@ -71,13 +71,20 @@ def distanceSquared(p1: tuple, p2: tuple):
     return sum([(p1[i] - p2[i]) ** 2 for i in range(len(p1))])
 
 
-# 0: Not parallel
+# 0: Not parallel, or one of the vectors is zero
 # 1: Parallel, but in opposite directions
 # 2: Parallel, and in the same direction
-def testParallel(v1: tuple, v2: tuple, tolerance: float = 0.01):
-    print("Parallel test result: ", 1 - abs(dot(normalize(v1), normalize(v2))))
-    if 1 - abs(dot(normalize(v1), normalize(v2))) <= tolerance:
-        if all(v1[i] * v2[i] >= 0 for i in range(len(v1))):
+def testParallel(v1: tuple, v2: tuple, tolerance: float = 0.0001):
+    m1, m2 = magnitude(v1), magnitude(v2)
+    if m1 == 0 or m2 == 0:
+        print("Found a zero vector")
+        return 0
+    
+    #print("Parallel test result between", v1, "and", v2, ":", 1 - abs(dot(normalize(v1), normalize(v2))))
+    if 1 - abs(dot(scaleV(v1, 1 / m1), scaleV(v2, 1 / m2))) <= tolerance:
+        # Sometimes, values that are very close to, but not exactly 0, will result in their products being less than 0,
+        # thus failing this test - so, a tolerance is used to allow for this, and still pass the test
+        if all(v1[i] * v2[i] > -tolerance for i in range(len(v1))):
             return 2
         else:
             return 1
