@@ -1,19 +1,11 @@
 import pygame, os, math, time
 from pygame.locals import *
 from pygame import gfxdraw
+from _resource import *
 from _linalg import *
 
 
 # Loading resources
-
-def resourcePath(path: str):
-    return os.path.join(os.path.dirname(__file__), "..", "resources", path)
-
-def loadFile(path: str, options: str = "r"):
-    return open(resourcePath(path), options)
-
-def loadFileGrid(path: str):
-    return [[*s] for s in loadFile(path).read().splitlines()]
 
 def loadImage(path: str):
     return pygame.image.load(resourcePath("images/" + path)).convert_alpha()

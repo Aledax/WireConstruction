@@ -1,5 +1,6 @@
-import pygame, sys, time, copy
+import pygame, sys, time, copy, jsonpickle
 from pygame.locals import *
+from _resource import *
 from _linalg import *
 from _pygameplus import *
 from wireframe import *
@@ -11,9 +12,16 @@ from wireframe import *
 
 # FEATURES FOR 0.5
 
-# Highlight edges to be deleted when clearing a vertex
-# Functionality for saving and loading wireframes as files
-# More aesthetically pleasing background
+# (Highlight edges to be deleted when clearing a vertex)
+# (Functionality for saving and loading wireframes as files)
+# (More aesthetically pleasing background)
+
+# FEATURES FOR 0.6
+
+# Button widget
+# Enterbox widget
+# Main menu screen
+# Loading wireframe screen (preset or file)
 
 # Window options
 
@@ -36,7 +44,7 @@ ROT_SPEED_MOUSE = 0.005
 
 MAX_UNDOS = 10
 
-VERTEX_RADIUS_SQUARED = math.pow(30, 2)
+VERTEX_RADIUS_SQUARED = math.pow(40, 2)
 
 # Keybinds
 
@@ -68,14 +76,16 @@ KEY_TOG_LIGHT = K_l
 KEY_TOG_DEBUG = K_0
 
 KEY_UNDO = K_z
+KEY_SAVE = K_s
+KEY_OPEN = K_o
 
 KEY_QUIT = K_q
 
 class App:
 
     class Subedge:
-        def __init__(self, sv1, sv2, wz, color, radius):
-            self.sv1, self.sv2, self.wz, self.color, self.radius = sv1, sv2, wz, color, radius
+        def __init__(self, e, sv1, sv2, wz, color, radius):
+            self.e, self.sv1, self.sv2, self.wz, self.color, self.radius = e, sv1, sv2, wz, color, radius
 
     def __init__(self):
         self.clock = pygame.time.Clock()
@@ -87,6 +97,12 @@ class App:
         self.perspective = True
         self.darkTheme = True
         self.enableDebug = True
+
+        # Background
+        self.backgroundSurfaces = [
+            self.verticalGradient(WINDOW_SIZE, (255, 255, 255), (255, 245, 230)),
+            self.verticalGradient(WINDOW_SIZE, (0, 0, 51), (19, 0, 26))
+        ]
 
         # Previous mouse state
         self.previousMousePos = (0, 0)
@@ -104,6 +120,13 @@ class App:
         self.wireframeStack = [wireframeFromPreset(1)]
 
         while True: self.loop()
+
+    def verticalGradient(self, size, colorTop, colorBot):
+        surface = pygame.Surface(size)
+        for row in range(size[1]):
+            color = roundV(lerpV(colorTop, colorBot, row / size[1]))
+            pygame.draw.rect(surface, color, (0, row, size[0], 1))
+        return surface
 
     def worldToScreen(self, vertex):
         if self.perspective:
@@ -140,11 +163,11 @@ class App:
             for step in range(int(sbc)):
                 sbNew = addV(sbCurrent, sbStep)
                 if not wireframe.edges[e].style["dotted"] or step % 2 == 0:
-                    subedges.append(App.Subedge(sbCurrent, sbNew, zCurrent + zStep, color, radius))
+                    subedges.append(App.Subedge(e, sbCurrent, sbNew, zCurrent + zStep, color, radius))
                 zCurrent += zStep
                 sbCurrent = sbNew
         
-            subedges.append(App.Subedge(sbCurrent, svs[1], (zCurrent + wvs[1][2]) * 0.5, color, radius))
+            subedges.append(App.Subedge(e, sbCurrent, svs[1], (zCurrent + wvs[1][2]) * 0.5, color, radius))
 
         subedges = sorted(subedges, key = lambda sb: sb.wz, reverse = True)
         return subedges
@@ -236,70 +259,20 @@ class App:
         if not (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE]):
             self.selectedV = -1
 
-        # Events
-
-        for event in pygame.event.get():
-
-            # Commands
-
-            if event.type == KEYDOWN and keys[KEY_COMMAND]:
-                if event.key == KEY_QUIT:
-                    pygame.quit()
-                    sys.exit()
-                elif event.key == KEY_TOG_AA:
-                    self.antialias = not self.antialias
-                elif event.key == KEY_TOG_DEPTH:
-                    self.edgeDepth = not self.edgeDepth
-                elif event.key == KEY_TOG_VIEW:
-                    self.perspective = not self.perspective
-                elif event.key == KEY_TOG_LIGHT:
-                    self.darkTheme = not self.darkTheme
-                elif event.key == KEY_TOG_DEBUG:
-                    self.enableDebug = not self.enableDebug
-                elif event.key == KEY_UNDO:
-                    if len(self.wireframeStack) > 1: self.wireframeStack.pop(-1)
-            
-            # Presets
-
-            elif event.type == KEYDOWN and keys[KEY_PRESET]:
-                if event.unicode.isdigit():
-                    i = int(event.unicode)
-                    if i >= 0 and i < numPresets:
-                        self.wireframeStack.append(wireframeFromPreset(i))
-            
-            # Vertex Selection
-
-            elif event.type == MOUSEBUTTONDOWN and event.button == 1:
-                if keys[KEY_ADDEDGE] or keys[KEY_REMEDGE]:
-                    self.selectedV = closestV
-            
-            elif event.type == MOUSEBUTTONUP and event.button == 1:
-                if keys[KEY_ADDEDGE] and self.selectedV != -1 and closestV != -1:
-                    wireframe.addEdge(self.selectedV, closestV, self.edgeStyle)
-                    self.wireframeStack.append(wireframe)
-                elif keys[KEY_REMEDGE] and self.selectedV != -1 and closestV != -1:
-                    wireframe.removeEdge({self.selectedV, closestV})
-                    self.wireframeStack.append(wireframe)
-                elif keys[KEY_REMVERTEX] and closestV != -1:
-                    wireframe.clearVertex(closestV)
-                    self.wireframeStack.append(wireframe)
-                self.selectedV = -1
-
-        # Cap undos
-
-        if len(self.wireframeStack) > MAX_UNDOS:
-            self.wireframeStack.pop(0)
-
         # Background
 
-        self.windowSurface.fill(self.flipColor((0, 0, 0)))
+        self.windowSurface.blit(self.backgroundSurfaces[self.darkTheme], (0, 0))
 
         # Draw subedges
 
         if self.antialias:
-            for sb in subedges: aaLine(self.windowSurface, sb.sv1, sb.sv2, sb.radius, self.flipColor(scaleV(sb.color, self.subedgeBrightness(sb.wz))))
+            for sb in subedges:
+                color = sb.color if not (not keys[KEY_PRESET] and keys[KEY_REMVERTEX] and closestV != -1 and sb.e in wireframe.vertexLinks[closestV]) else (255, 0, 0)
+                aaLine(self.windowSurface, sb.sv1, sb.sv2, sb.radius, self.flipColor(scaleV(color, self.subedgeBrightness(sb.wz))))
         else:
-            for sb in subedges: pygame.draw.line(self.windowSurface, self.flipColor(scaleV(sb.color, self.subedgeBrightness(sb.wz))), sb.sv1, sb.sv2, 2 * sb.radius)
+            for sb in subedges:
+                color = sb.color if not (not keys[KEY_PRESET] and keys[KEY_REMVERTEX] and closestV != -1 and sb.e in wireframe.vertexLinks[closestV]) else (255, 0, 0)
+                pygame.draw.line(self.windowSurface, self.flipColor(scaleV(color, self.subedgeBrightness(sb.wz))), sb.sv1, sb.sv2, 2 * sb.radius)
 
         # Draw dragging edge
 
@@ -325,20 +298,85 @@ class App:
 
         # Draw vertices
 
-        for v in range(len(worldVertices)):
-            if v == self.selectedV:
-                pygame.draw.circle(self.windowSurface, (255, 0, 255), screenVertices[v], self.vertexRadius(worldVertices[v][2]))
-            elif keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_REMVERTEX]:
-                if v == closestV: color = (255, 255, 0)
-                elif keys[KEY_ADDEDGE]: color = (0, 255, 0)
-                elif keys[KEY_REMEDGE]: color = (255, 0, 255)
-                elif keys[KEY_REMVERTEX]: color = (255, 0, 0)
-
-                pygame.draw.circle(self.windowSurface, color, screenVertices[v], self.vertexRadius(worldVertices[v][2]))
+        if not keys[KEY_PRESET]:
+            for v in sorted(range(len(worldVertices)), key = lambda v: worldVertices[v][2], reverse = True):
+                if v != self.selectedV and (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_REMVERTEX]):
+                    if v == closestV: color = (255, 255, 0)
+                    elif keys[KEY_ADDEDGE]: color = (0, 255, 0)
+                    elif keys[KEY_REMEDGE]: color = (255, 0, 255)
+                    elif keys[KEY_REMVERTEX]: color = (255, 0, 0)
+                    pygame.draw.circle(self.windowSurface, color, screenVertices[v], self.vertexRadius(worldVertices[v][2]))
+            if self.selectedV != -1:
+                pygame.draw.circle(self.windowSurface, (255, 0, 255), screenVertices[self.selectedV], self.vertexRadius(worldVertices[self.selectedV][2]))
 
         if self.enableDebug:
             for v in range(len(worldVertices)):
                 pygameDebug(self.windowSurface, addV(screenVertices[v], (-30, -30)), str(v))
+
+        # Events
+
+        for event in pygame.event.get():
+
+            # Commands
+
+            if event.type == KEYDOWN and keys[KEY_COMMAND]:
+                if event.key == KEY_QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.key == KEY_TOG_AA:
+                    self.antialias = not self.antialias
+                elif event.key == KEY_TOG_DEPTH:
+                    self.edgeDepth = not self.edgeDepth
+                elif event.key == KEY_TOG_VIEW:
+                    self.perspective = not self.perspective
+                elif event.key == KEY_TOG_LIGHT:
+                    self.darkTheme = not self.darkTheme
+                elif event.key == KEY_TOG_DEBUG:
+                    self.enableDebug = not self.enableDebug
+                elif event.key == KEY_UNDO:
+                    if len(self.wireframeStack) > 1: self.wireframeStack.pop(-1)
+                elif event.key == KEY_SAVE:
+                    name = input("Wireframe name: ")
+                    writeTextFile("wireframes/custom/" + name + ".txt", jsonpickle.encode(wireframe))
+                elif event.key == KEY_OPEN:
+                    name = input("Wireframe name: ")
+                    f = loadFile("wireframes/custom/" + name + ".txt")
+                    if f:
+                        self.wireframeStack.append(jsonpickle.decode(f.read()))
+                    else:
+                        print("No wireframe named " + name)
+            
+            # Presets
+
+            elif event.type == KEYDOWN and keys[KEY_PRESET]:
+                if event.unicode.isdigit():
+                    i = int(event.unicode)
+                    if i > 0 and i <= numPresets:
+                        self.wireframeStack.append(wireframeFromPreset(i - 1))
+            
+            # Vertex Selection
+
+            elif event.type == MOUSEBUTTONDOWN and event.button == 1:
+                if keys[KEY_ADDEDGE] or keys[KEY_REMEDGE]:
+                    self.selectedV = closestV
+            
+            elif event.type == MOUSEBUTTONUP and event.button == 1:
+                if keys[KEY_ADDEDGE] and self.selectedV != -1 and closestV != -1:
+                    wireframe.addEdge(self.selectedV, closestV, self.edgeStyle)
+                    self.wireframeStack.append(wireframe)
+                elif keys[KEY_REMEDGE] and self.selectedV != -1 and closestV != -1:
+                    wireframe.removeEdge({self.selectedV, closestV})
+                    self.wireframeStack.append(wireframe)
+                elif keys[KEY_REMVERTEX] and closestV != -1:
+                    wireframe.clearVertex(closestV)
+                    self.wireframeStack.append(wireframe)
+                    closestV = -1
+                self.selectedV = -1
+
+        # Cap undos
+
+        if len(self.wireframeStack) > MAX_UNDOS:
+            self.wireframeStack.pop(0)
 
         # Frame data
 
