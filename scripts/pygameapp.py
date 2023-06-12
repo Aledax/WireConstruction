@@ -140,7 +140,7 @@ class App:
         self.wireframeUnitVectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
 
         # Initial level
-        self.loadLevel(loadFile("wireframes/custom/squarepyramid.txt"))
+        self.loadLevel(loadFile("wireframes/custom/giza.txt"))
 
         # Music and Sfx
         loadMusic("Labrynth.mp3")
@@ -220,7 +220,7 @@ class App:
 
         if keys[KEY_COMMAND]:
             rotationSpeed = 0
-        elif keys[KEY_SLOWROT] or keys[K_SLOWROT2]:
+        elif keys[KEY_SLOWROT] or keys[KEY_SLOWROT2]:
             rotationSpeed = ROT_SPEED_KEYSLOW
         else:
             rotationSpeed = ROT_SPEED_KEY
