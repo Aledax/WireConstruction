@@ -1,196 +1,219 @@
 import math, copy, numpy
 from _linalg import *
 
-class Edge:
-
-    defaultColor = (255, 255, 255)
-    defaultRadius = 2
-    defaultDotted = False
-
-    def __init__(self, v1, v2, color = defaultColor, radius = defaultRadius, dotted = defaultDotted):
-        self.v1, self.v2 = v1, v2 # Vertex INDICES, not coordinates
-        self.color, self.radius, self.dotted = color, radius, dotted
-
 class Wireframe:
 
-    def __init__(self, vertices, edgeIndices, scale = 1):
-        self.scale = scale
+    defaultStyle = {
+        "radius": 2,
+        "color": (255, 255, 255),
+        "dotted": False
+    }
 
-        # Relative vertices are constant, and are relative to wireframe's center.
-        self.localVertices = vertices # Tuple3 list (coordinates)
-        self.edges = [Edge(e[0], e[1]) for e in edgeIndices] # Edge list
+    class Vertex:
+        def __init__(self, id, localPosition):
+            self.id = id # Int
+            self.localPosition = localPosition # Float Vector3
 
-        # A "ghost vertex" is one that does not technically exist in the localVertices array but may be
-        # created by the user.
-        # It is defined by 2 attributes: (world position, list of edges it touches)
-        self.ghostVertices = []
+    class Edge:
+        def __init__(self, id, style):
+            self.id = id # Int
+            self.style = style # Dict
 
-    @property
-    def edgeIndices(self):
-        return [(e.v1, e.v2) for e in self.edges]
-    
-    def removeEdgeByIndices(self, v1, v2):
-        for e in self.edges:
-            if (e.v1 == v1 and e.v2 == v2) or (e.v1 == v2 and e.v2 == v1):
-                self.edges.remove(e)
-                return
-
-    def reset(self):
-        self.unitVectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-
-    def addEdge(self, edge):
-        if edge[0] == edge[1]: return
-        reversedEdge = (edge[1], edge[0])
-        if edge in self.edgeIndices or reversedEdge in self.edgeIndices: return
-
-        # Check if the edge would pass through an existing vertex, in which case call recursively
-        for i in range(len(self.localVertices)):
-            if i in edge: continue
-            v = self.localVertices[i]
-            if testParallel(subV(v, self.localVertices[edge[0]]), subV(v, self.localVertices[edge[1]])) == 1:
-                self.addEdge((edge[0], i))
-                self.addEdge((edge[1], i))
-                return
-
-        # Check if the edge would pass through an existing ghost
-        for ghost in self.ghostVertices:
-            if testParallel(subV(ghost[0], self.localVertices[edge[0]]), subV(ghost[0], self.localVertices[edge[1]])) == 1:
-                ghost[1].append(edge)
-
-        # If line segments intersect, then traversing between alternating endpoints (e1[0] -> e2[0] -> e1[1] -> e2[1]) will create a valid quadrilateral.
-        # i.e. The 2 cross products obtained by traversing these endpoints will all be parallel and will point in the same direction.
-        for otherEdge in self.edgeIndices:
-            
-            # Ghost edge is impossible unless all four vertices are distinct
-            if edge[0] in otherEdge or edge[1] in otherEdge: continue
-
-            path = [self.localVertices[i] for i in [edge[0], otherEdge[0], edge[1], otherEdge[1]]]
-            c1 = cross3(subV(path[1], path[0]), subV(path[2], path[1]))
-            c2 = cross3(subV(path[2], path[1]), subV(path[3], path[2]))
-            c3 = cross3(subV(path[3], path[2]), subV(path[0], path[3]))
-
-            # Make sure all paths are linearly independent
-            if magnitude(c1) == 0 or magnitude(c2) == 0 or magnitude(c3) == 0:
-                continue
-
-            if testParallel(c1, c2) == 2 and testParallel(c2, c3) == 2:
-
-                # Calculate edge intersection position
-                p1, p2 = path[0], path[1]
-                v1, v2 = subV(path[2], path[0]), subV(path[3], path[1])
-
-                try:
-                    s, t = numpy.linalg.solve([[v1[0], -v2[0]], [v1[1], -v2[1]]], [p2[0] - p1[0], p2[1] - p1[1]])
-                except:
-                    try:
-                        s, t = numpy.linalg.solve([[v1[0], -v2[0]], [v1[2], -v2[2]]], [p2[0] - p1[0], p2[2] - p1[2]])
-                    except:
-                        s, t = numpy.linalg.solve([[v1[1], -v2[1]], [v1[2], -v2[2]]], [p2[1] - p1[1], p2[2] - p1[2]])
-
-                p3 = addV(p1, scaleV(v1, s))
-
-                # Check if a ghost with the same position already exists
-                if any(p3 == ghost[0] for ghost in self.ghostVertices): continue
-                
-                # Check if intersection actually lies on the edges (and not just the lines they lie on)
-                if testParallel(subV(p3, path[0]), subV(p3, path[2])) != 1 or testParallel(subV(p3, path[1]), subV(p3, path[3])) != 1: continue
-
-                self.ghostVertices.append((p3, [edge, otherEdge]))
-
-        self.edges.append(Edge(*edge))
-
-    def removeEdge(self, edge):
-        reversedEdge = (edge[1], edge[0])
-        if edge in self.edgeIndices:
-            self.removeEdgeByIndices(*edge)
-        elif reversedEdge in self.edgeIndices:
-            self.removeEdgeByIndices(*edge)
-
-        # Delete edge data from ghosts that the edge crosses, remove ghosts if necessary
-        newGhosts = []
-        for ghost in self.ghostVertices:
-            if edge in ghost[1]:
-                ghost[1].remove(edge)
-            elif reversedEdge in ghost[1]:
-                ghost[1].remove(reversedEdge)
-            if len(ghost[1]) >= 2:
-                newGhosts.append(ghost)
-        self.ghostVertices = newGhosts
-
-    def materializeGhost(self, gId):
-        ghost = self.ghostVertices[gId]
-        newVertexId = len(self.localVertices)
-        self.localVertices.append(ghost[0])
-
-        newEdges = []
-
-        # Delete the edges that are getting split
-        for e in self.edges:
-            indices, rindices = (e.v1, e.v2), (e.v2, e.v1)
-            if indices not in ghost[1] and rindices not in ghost[1]:
-                newEdges.append(e)
-            # Update the edges of any other ghosts that have this edge
-            else:
-                for otherG in self.ghostVertices:
-                    if otherG != ghost and (indices in otherG[1] or rindices in otherG[1]):
-                        if indices in otherG[1]: otherG[1].remove(indices)
-                        elif rindices in otherG[1]: otherG[1].remove(rindices)
-
-                        if testParallel(subV(otherG[0], ghost[0]), subV(otherG[0], self.localVertices[e.v1])) == 1:
-                            otherG[1].append((e.v1, newVertexId))
-                        else:
-                            otherG[1].append((e.v2, newVertexId))
-
-        # Add the new halved edges
-        for e in ghost[1]:
-            newEdges.append(Edge(e[0], newVertexId))
-            newEdges.append(Edge(e[1], newVertexId))
-
-        self.edges = newEdges
-        self.ghostVertices.pop(gId)
-
-    def removeVertex(self, vId):
-
-        # Delete edges connected to the vertex
-        for i in range(len(self.edges) - 1, -1, -1):
-            if vId == self.edges[i].v1 or vId == self.edges[i].v2:
-                self.edges.pop(i)
+    def __init__(self, vertexLocalPositions, edgeVertexConnections):
         
-        # Remove the vertex
-        self.localVertices.pop(vId)
+        # The lengths of vertices and vertexLinks should always be the same.
+        # The lengths of edges and edgeLinks should always be the same.
 
-        # Shift the edge indices that are greater than vertex by -1
-        for e in self.edges:
-            e.v1 = e.v1 - 1 if e.v1 > vId else e.v1
-            e.v2 = e.v2 - 1 if e.v2 > vId else e.v2
+        self.vertices = [] # Vertex Array
+        self.edges = [] # Edge Array
+
+        self.vertexLinks = [] # Int Set Array (Which edges are each vertex connected to?)
+        self.edgeLinks = [] # Int Set Array (Which vertices are each edge connected to?)
+
+        for v in range(len(vertexLocalPositions)):
+            self.vertices.append(Wireframe.Vertex(v, vertexLocalPositions[v]))
+            self.vertexLinks.append(set())
+        for e in range(len(edgeVertexConnections)):
+            self.edges.append(Wireframe.Edge(e, Wireframe.defaultStyle))
+            self.vertexLinks[edgeVertexConnections[e][0]].add(e)
+            self.vertexLinks[edgeVertexConnections[e][1]].add(e)
+            self.edgeLinks.append({*edgeVertexConnections[e]})
 
     def getWorldVertices(self, unitVectors):
-        return [[sum(unitVectors[i][axis] * localV[i] for i in range(3)) * self.scale for axis in range(3)] for localV in self.localVertices]
-    
-    def getWorldGhosts(self, unitVectors):
-        return [[sum(unitVectors[i][axis] * ghost[0][i] for i in range(3)) * self.scale for axis in range(3)] for ghost in self.ghostVertices]
+        return [[sum(unitVectors[i][axis] * v.localPosition[i] for i in range(3)) for axis in range(3)] for v in self.vertices]
 
-globalScale = 1
+    # Returns True if they cross and False otherwise
+    def vertexEdgeCrossCheck(self, v, evs):
+        # Vertex cannot be one of the edge's vertices
+        if v in evs: return False
 
+        # Parallel check
+        vp, ev1p, ev2p = (self.vertices[thisV].localPosition for thisV in [v] + list(evs))
+        print("Parallel test for ", v, ", ", tuple(evs), ": ", testParallel(subV(vp, ev1p), subV(vp, ev2p)))
+        return testParallel(subV(vp, ev1p), subV(vp, ev2p)) == 1
+
+    # Returns the point of intersection if they cross and None otherwise
+    def edgeEdgeCrossCheck(self, evs1, evs2):
+        # Vertices must be unique
+        if not evs1.isdisjoint(evs2): return False
+
+        # Calculate cross products
+        path = [self.vertices[v].localPosition for v in [v for pair in zip(list(evs1), list(evs2)) for v in pair]]
+        crosses = [cross3(subV(path[c], path[(c+3)%4]), subV(path[(c+1)%4], path[c])) for c in range(1, 4)]
+        
+        # Cancel if linearly dependent
+        if any(magnitude(c) == 0 for c in crosses): return None
+        # Cancel if 4 points are not coplanar
+        if testParallel(crosses[0], crosses[1]) != 2 or testParallel(crosses[1], crosses[2]) != 2: return None
+        
+        # Calculate intersection
+        p1, p2 = path[0:2]
+        v1, v2 = subV(path[2], path[0]), subV(path[3], path[1])
+        try:
+            s, t = numpy.linalg.solve([[v1[0], -v2[0]], [v1[1], -v2[1]]], [p2[0] - p1[0], p2[1] - p1[1]])
+        except:
+            try:
+                s, t = numpy.linalg.solve([[v1[0], -v2[0]], [v1[2], -v2[2]]], [p2[0] - p1[0], p2[2] - p1[2]])
+            except:
+                s, t = numpy.linalg.solve([[v1[1], -v2[1]], [v1[2], -v2[2]]], [p2[1] - p1[1], p2[2] - p1[2]])
+        intersection = addV(p1, scaleV(v1, s))
+        
+        # Cancel if intersection doesn't lie on both edges
+        print("Intersection check: ", evs1, evs2)
+        if testParallel(subV(intersection, path[0]), subV(intersection, path[2])) != 1 or testParallel(subV(intersection, path[1]), subV(intersection, path[3])) != 1: return None
+        
+        # Confirmed intersection
+        return intersection
+
+    # Mimicks overloading by using the argument type:
+    # Int: Edge id.
+    # Set: Edge vertex links.
+    def removeEdge(self, e):
+        # Check e's type
+        if isinstance(e, set):
+            print("Preparing to remove edge ", tuple(e))
+            # e is a set; Check if evs actually exists
+            evs = e
+            if evs not in self.edgeLinks:
+                # e does not exist; Check for vertex crossings
+                for v in range(len(self.vertices)):
+                    if self.vertexEdgeCrossCheck(v, evs):
+                        # Crosses a vertex; Recursive call
+                        print("Found intersecting vertex ", v)
+                        for thisV in evs:
+                            self.removeEdge(thisV, v)
+                        return
+                return
+            else:
+                # e exists; set e to its edge index instead of its vertex links
+                e = self.edgeLinks.index(e)
+
+        # e exists.
+        print("Removing edge ", tuple(self.edgeLinks[e]))
+        # Remove edge links from linked vertices
+        for v in self.edgeLinks[e]:
+            self.vertexLinks[v].discard(e)
+        
+        # Delete edge
+        self.edges.pop(e)
+        self.edgeLinks.pop(e)
+        
+        # Shift edge ids
+        for v in range(len(self.vertices)):
+            self.vertexLinks[v] = {otherE - 1 if otherE > e else otherE for otherE in self.vertexLinks[v]}
+        for otherE in range(e, len(self.edges)):
+            self.edges[otherE].id -= 1
+
+    def clearVertex(self, v):
+        delete = not self.vertexLinks[v]
+
+        # Remove edges
+        for e in sorted(self.vertexLinks[v], key = lambda e: e, reverse = True):
+            self.removeEdge(e)
+        
+        if delete:
+            # Delete vertex
+            self.vertices.pop(v)
+            self.vertexLinks.pop(v)
+            
+            # Shift vertex ids
+            for otherV in range(v, len(self.vertices)):
+                self.vertices[otherV].id -= 1
+            for e in range(len(self.edges)):
+                self.edgeLinks[e] = {otherV - 1 if otherV > v else otherV for otherV in self.edgeLinks[e]}
+
+    def addEdge(self, v1, v2, style, checkCross = True):
+        # Can't have an edge between two of the same vertex
+        if v1 == v2: return
+        # Can't make a duplicate edge
+        if {v1, v2} in self.edgeLinks: return
+
+        print("Preparing to add edge ", (v1, v2))
+
+        # Intersection check:
+        # 1. If the edge crosses a vertex, call this function recursively
+        # 2. Otherwise, if the edge crosses an edge, create a new vertex, and call this function recursively
+
+        if checkCross:
+            for v in range(len(self.vertices)):
+                # Cross check
+                if self.vertexEdgeCrossCheck(v, {v1, v2}):
+                    # If True: Recursive call, return
+                    print("Found intersection with vertex ", v)
+                    self.addEdge(v, v1, style)
+                    self.addEdge(v, v2, style)
+                    return
+            
+            for e in range(len(self.edges)):
+                # "evs": Edge's vertices
+                evs = self.edgeLinks[e]
+                # Cross check
+                intersection = self.edgeEdgeCrossCheck(evs, {v1, v2})
+                if intersection:
+                    print("Found intersection with edge ", tuple(evs))
+                    # If True:
+                    # Remove crossing edge
+                    otherStyle = self.edges[e].style
+                    self.removeEdge(e)
+                    # Create new vertex
+                    newV = len(self.vertices)
+                    self.vertices.append(Wireframe.Vertex(newV, intersection))
+                    self.vertexLinks.append(set())
+                    # Create 4 new edges
+                    for otherV in evs:
+                        self.addEdge(otherV, newV, otherStyle, False)
+                    for thisV in {v1, v2}:
+                        self.addEdge(thisV, newV, style)
+                    return
+            
+        # No crosses at all
+        print("Adding edge ", (v1, v2))
+        newE = len(self.edges)
+        self.edges.append(Wireframe.Edge(newE, style))
+        self.edgeLinks.append({v1, v2})
+        for v in {v1, v2}:
+            self.vertexLinks[v].add(newE)
+
+d1 = 1 / math.sqrt(3)
 tetrahedronVertices = [
-    (1, 1, 1),
-    (-1, -1, 1),
-    (1, -1, -1),
-    (-1, 1, -1),
+    (d1, d1, d1),
+    (-d1, -d1, d1),
+    (d1, -d1, -d1),
+    (-d1, d1, -d1),
 ]
 tetrahedronEdges = [
     (0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)
 ]
 
 cubeVertices = [
-    (1, 1, 1),
-    (-1, 1, 1),
-    (-1, -1, 1),
-    (1, -1, 1),
-    (1, 1, -1),
-    (-1, 1, -1),
-    (-1, -1, -1),
-    (1, -1, -1)
+    (-d1, d1, d1),
+    (d1, d1, d1),
+    (d1, -d1, d1),
+    (-d1, -d1, d1),
+    (-d1, d1, -d1),
+    (d1, d1, -d1),
+    (d1, -d1, -d1),
+    (-d1, -d1, -d1)
 ]
 cubeEdges = [
     (0, 1), (1, 2), (2, 3), (3, 0),
@@ -254,12 +277,12 @@ dodecahedronEdges = [
 ]
 
 presets = (
-    (tetrahedronVertices, tetrahedronEdges, 1 / math.sqrt(3)),
-    (cubeVertices, cubeEdges, 1 / math.sqrt(3)),
-    (octahedronVertices, octahedronEdges, 1),
-    (dodecahedronVertices, dodecahedronEdges, 1)
+    (tetrahedronVertices, tetrahedronEdges),
+    (cubeVertices, cubeEdges),
+    (octahedronVertices, octahedronEdges),
+    (dodecahedronVertices, dodecahedronEdges)
 )
 numPresets = len(presets)
 
 def wireframeFromPreset(id):
-    return Wireframe(copy.deepcopy(presets[id][0]), copy.deepcopy(presets[id][1]), copy.deepcopy(presets[id][2]) * globalScale)
+    return Wireframe(*copy.deepcopy(presets[id]))

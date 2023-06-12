@@ -74,7 +74,8 @@ def distanceSquared(p1: tuple, p2: tuple):
 # 0: Not parallel
 # 1: Parallel, but in opposite directions
 # 2: Parallel, and in the same direction
-def testParallel(v1: tuple, v2: tuple, tolerance: float = 0.001):
+def testParallel(v1: tuple, v2: tuple, tolerance: float = 0.01):
+    print("Parallel test result: ", 1 - abs(dot(normalize(v1), normalize(v2))))
     if 1 - abs(dot(normalize(v1), normalize(v2))) <= tolerance:
         if all(v1[i] * v2[i] >= 0 for i in range(len(v1))):
             return 2
