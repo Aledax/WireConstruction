@@ -5,26 +5,18 @@ from _linalg import *
 from _pygameplus import *
 from wireframe import *
 
-# BUGS
-
-# (Parallel test is weird for the dodecahedron)
-# - LESSONS:
-#  - DO NOT try to equate weird calculations to zero. Instead, check if they are below a very low TOLERANCE.
-#  - Checking whether two line segments intersect or not only requires the calculation of TWO path cross products.
-#  - Instead of getting numpy to solve a system of linear equations entirely, you only need one of the constants, which
-#    can easily be computed algebraically, with a bit of hand-written work first.
-
-# FEATURES FOR 0.6
-
-# (Toggle fancy background)
-# (Custom edges)
-# (Editing existing edges)
-# (Two modes of edge selection)
-# (Button widget)
-
 # FEATURES FOR 0.7
 
+# (Add basic sound effects)
+
+# FEATURES FOR 0.8
+
+# Use ModernGL to render the scene
+
+# FEATURES FOR THE FUTURE
+
 # Enterbox widget
+# Separate game screen from the app
 # Main menu screen
 # Loading wireframe screen (preset or file)
 
@@ -118,6 +110,7 @@ class App:
 
         # Previous mouse state
         self.previousMousePos = (0, 0)
+        self.previousClosestV = -1
 
         # For selecting an edge (via two vertices)
         self.selectedV = -1
@@ -131,7 +124,7 @@ class App:
         self.buttonEdgeWhite = CircleButton(30, 200, 20, self.setEdgeStyle, ("color", (255, 255, 255)))
         self.buttonEdgeRed = CircleButton(30, 260, 20, self.setEdgeStyle, ("color", (255, 0, 0)))
         self.buttonEdgeYellow = CircleButton(30, 320, 20, self.setEdgeStyle, ("color", (255, 255, 0)))
-        self.buttonEdgeBlue = CircleButton(30, 380, 20, self.setEdgeStyle, ("color", (0, 0, 255)))
+        self.buttonEdgeBlue = CircleButton(30, 380, 20, self.setEdgeStyle, ("color", (0, 125, 255)))
         self.buttonEdgeSolid = CircleButton(30, 440, 20, self.setEdgeStyle, ("dotted", False))
         self.buttonEdgeDotted = CircleButton(30, 500, 20, self.setEdgeStyle, ("dotted", True))
         self.buttons = [self.buttonEdgeWhite, self.buttonEdgeRed, self.buttonEdgeYellow, self.buttonEdgeBlue, self.buttonEdgeSolid, self.buttonEdgeDotted]
@@ -141,6 +134,18 @@ class App:
 
         # For undos
         self.wireframeStack = [wireframeFromPreset(1)]
+
+        # Music and Sfx
+        loadMusic("The Alchemist.mp3")
+        pygame.mixer.music.set_volume(0.375)
+        pygame.mixer.music.play(-1)
+
+        self.showVertexSound = loadSfx("tick.wav")
+        self.hideVertexSound = loadSfx("tick2.wav")
+        self.hoverVertexSound = loadSfx("bike.wav")
+        self.clickVertexSound = loadSfx("click.wav")
+        self.breakSound = loadSfx("pop.wav")
+        self.placeSound = loadSfx("glasstap2.wav")
 
         while True: self.loop()
 
@@ -158,7 +163,7 @@ class App:
         if self.perspective:
             return addV(mulV(scaleV(vertex[0:2], (WORLD_SCREEN_Z - WORLD_EYE_Z) / (vertex[2] - WORLD_EYE_Z)), ZOOM_PERSPECTIVE), WINDOW_CENTER)
         else:
-            return addV(mulV(vertex.localPosition[0:2], ZOOM_ORTHOGONAL), WINDOW_CENTER)
+            return addV(mulV(vertex[0:2], ZOOM_ORTHOGONAL), WINDOW_CENTER)
 
     def generateSubedges(self, wireframe, worldVertices, screenVertices):
 
@@ -253,7 +258,7 @@ class App:
         if keys[KEY_CW]:
             self.rotateWireframeUnitVectors((0, 0, rotationSpeed))
 
-        if mousePressed[0] and self.selectedV == -1:
+        if mousePressed[0] and self.panning:
             (mouseH, mouseV) = subV(mousePos, self.previousMousePos)
             self.rotateWireframeUnitVectors(scaleV((mouseV, -mouseH, 0), ROT_SPEED_MOUSE))
 
@@ -280,6 +285,7 @@ class App:
                     if ds < VERTEX_RADIUS_SQUARED:
                         closestV = i
                         closestDS = ds
+        if closestV != -1 and self.previousClosestV != closestV: self.hoverVertexSound.play()
 
         # Drop selected vertex
 
@@ -303,7 +309,7 @@ class App:
 
         # Draw dragging edge
 
-        if mousePressed[0] and self.selectedV != -1:
+        if mousePressed[0] and self.selectedV != -1 and not self.panning:
             if closestV != -1:
                 pos = screenVertices[closestV]
                 if keys[KEY_ADDEDGE]:
@@ -351,7 +357,7 @@ class App:
         pygame.draw.circle(self.windowSurface, (255, 255, 255), self.buttonEdgeWhite.pos, 20)
         pygame.draw.circle(self.windowSurface, (255, 0, 0), self.buttonEdgeRed.pos, 20)
         pygame.draw.circle(self.windowSurface, (255, 255, 0), self.buttonEdgeYellow.pos, 20)
-        pygame.draw.circle(self.windowSurface, (0, 0, 255), self.buttonEdgeBlue.pos, 20)
+        pygame.draw.circle(self.windowSurface, (0, 125, 255), self.buttonEdgeBlue.pos, 20)
 
         # Events
 
@@ -395,16 +401,22 @@ class App:
                     i = int(event.unicode)
                     if i > 0 and i <= numPresets:
                         self.wireframeStack.append(wireframeFromPreset(i - 1))
+
+            # Vertex sounds
+
+            elif event.type == KEYDOWN and event.key in [KEY_ADDEDGE, KEY_REMEDGE, KEY_REMVERTEX, KEY_EDTEDGE]:
+                self.showVertexSound.play()
+            elif event.type == KEYUP and event.key in [KEY_ADDEDGE, KEY_REMEDGE, KEY_REMVERTEX, KEY_EDTEDGE]:
+                self.hideVertexSound.play()
             
             # Vertex Selection and Button Presses
 
             elif event.type == MOUSEBUTTONDOWN and event.button == 1:
                 if closestV == -1:
                     self.panning = True
-                if (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]) and self.selectedV == -1:
-                    if closestV != -1:
-                        self.selectedV = closestV
-                        self.draggingV = True
+                elif (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]) and self.selectedV == -1 and closestV != -1:
+                    self.selectedV = closestV
+                    self.clickVertexSound.play()
 
                 for button in self.buttons:
                     if button.checkHover(mousePos):
@@ -421,8 +433,10 @@ class App:
                         if self.selectedV != -1:
                             if closestV != -1 and closestV != self.selectedV:
                                 success = True
+                            elif closestV == self.selectedV:
+                                self.dragSelect = False
                             else:
-                                self.dragSelect = True
+                                self.selectedV = -1
                     else:
                         if closestV != -1 and closestV != self.selectedV:
                             success = True
@@ -433,18 +447,22 @@ class App:
 
                     if success:
                         if keys[KEY_ADDEDGE]:
+                            pygame.mixer.Sound.play(self.placeSound)
                             wireframe.addEdge(self.selectedV, closestV, self.edgeStyle)
                             self.wireframeStack.append(wireframe)
                         elif keys[KEY_REMEDGE]:
+                            pygame.mixer.Sound.play(self.breakSound)
                             wireframe.removeEdge({self.selectedV, closestV})
                             self.wireframeStack.append(wireframe)
                         elif keys[KEY_EDTEDGE]:
+                            pygame.mixer.Sound.play(self.placeSound)
                             wireframe.editEdge({self.selectedV, closestV}, self.edgeStyle)
                             self.wireframeStack.append(wireframe)
                         self.selectedV = -1
 
                 elif keys[KEY_REMVERTEX]:
                     if closestV != -1:
+                        pygame.mixer.Sound.play(self.breakSound)
                         wireframe.clearVertex(closestV)
                         self.wireframeStack.append(wireframe)
                         self.selectedV = -1
@@ -457,6 +475,7 @@ class App:
         # Frame data
 
         self.previousMousePos = mousePos
+        self.previousClosestV = closestV
 
         if self.enableDebug: pygameDebug(self.windowSurface, (10, 10), "Entire frame time: " + str(round((time.perf_counter() - timer) * 60, 2)))
 

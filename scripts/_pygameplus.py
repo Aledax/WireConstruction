@@ -1,9 +1,10 @@
-import pygame, os, math, time
+import pygame, math, time
 from pygame.locals import *
 from pygame import gfxdraw
 from _resource import *
 from _linalg import *
 
+pygame.mixer.init()
 
 # Loading resources
 
@@ -13,8 +14,11 @@ def loadImage(path: str):
 def loadFont(path: str, size: int):
     return pygame.font.Font(resourcePath("fonts/" + path), size)
 
-def loadSound(path: str):
-    return pygame.mixer.Sound(resourcePath("sounds/" + path))
+def loadSfx(path: str):
+    return pygame.mixer.Sound(resourcePath("sounds/sfx/" + path))
+
+def loadMusic(path: str):
+    pygame.mixer.music.load(resourcePath("sounds/music/" + path))
 
 
 # Widgets
