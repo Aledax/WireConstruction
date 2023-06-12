@@ -31,8 +31,6 @@ Some useful experience I gained in this project:
 - Designing a responsive, intuitive, and visually pleasing UI
 - Designing satisfying sound effects with Audacity
 
-The """version control""" used for this repository is horrendous. I've learned my lesson since.
-
 ## Controls
 
 Basic controls:
