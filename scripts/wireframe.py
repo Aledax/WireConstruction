@@ -321,15 +321,18 @@ def wireframeEquality(w1, w2):
     for v1 in range(len(w1.vertices)):
         found = False
         for v2 in range(len(w2.vertices)):
-            if w1.vertices[v1].localPosition == w2.vertices[v2].localPosition:
+            if all(abs(c) <= Wireframe.tolerance for c in subV(w1.vertices[v1].localPosition, w2.vertices[v2].localPosition)):
                 vMappings[v1] = v2
+                print("Current wireframe", v1, "= Goal wireframe", v2)
                 found = True
                 break
         if not found:
+            print("Bad vertex")
             return False
         
     for e1 in range(len(w1.edges)):
         if {vMappings[v] for v in w1.edgeLinks[e1]} not in w2.edgeLinks:
+            print("Bad edge: ", {vMappings[v] for v in w1.edgeLinks[e1]})
             return False
         
     return True

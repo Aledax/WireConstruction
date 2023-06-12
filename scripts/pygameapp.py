@@ -28,7 +28,6 @@ import shaders
 # Main menu screen
 # Loading wireframe screen (preset or file)
 
-
 # Window options
 
 WINDOW_SIZE = (700, 700)
@@ -144,8 +143,8 @@ class App:
         self.goalWireframe = wireframeFromPreset(1)
 
         # Music and Sfx
-        loadMusic("Beauty.mp3")
-        pygame.mixer.music.set_volume(0.375)
+        loadMusic("Labrynth.mp3")
+        pygame.mixer.music.set_volume(0.3)
         pygame.mixer.music.play(-1)
 
         # Music colors:
