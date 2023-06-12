@@ -99,7 +99,7 @@ void main() {
     float z; // The world Z coordinate of the point on a line segment closest to the pixel.
     float b; // The brightness calculated from d and z.
 
-    vec3 maxColor = texture(tex, uvs).rgb; // The brightest color calculated thus far.
+    vec3 maxColor = texture(tex, uvs).rgb + baseColor; // The brightest color calculated thus far.
     
     // Brightening based on edge proximity.
     for (int i = 0; i < numEdges; i++) {
