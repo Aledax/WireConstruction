@@ -1,6 +1,6 @@
 # Wire Construction
 
-A unique and challenging puzzle game born from my passion for puzzle games and geometry. I created this purely for fun.
+A unique and challenging puzzle game born from my passion for puzzle games and geometry. I created this for fun.
 
 To play the game, make sure you have the following installed:
 - Python 3
