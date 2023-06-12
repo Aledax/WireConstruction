@@ -138,9 +138,8 @@ class App:
         # For rotation
         self.wireframeUnitVectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
 
-        # Wireframe objects
-        self.wireframeStack = [wireframeFromPreset(1)]
-        self.goalWireframe = wireframeFromPreset(1)
+        # Initial level
+        self.loadLevel(loadFile("wireframes/custom/squarepyramid.txt"))
 
         # Music and Sfx
         loadMusic("Labrynth.mp3")
@@ -184,6 +183,10 @@ class App:
     
     def vertexRadius(self, worldZ):
         return 10 - worldZ * 5
+    
+    def loadLevel(self, f):
+        self.goalWireframe = jsonpickle.decode(f.read())
+        self.wireframeStack = [wireframeFromPreset(self.goalWireframe.preset)]
     
     def quit(self):
         shaders.freeTextureMemory()
@@ -360,8 +363,7 @@ class App:
                     name = input("Wireframe name: ")
                     f = loadFile("wireframes/custom/" + name + ".txt")
                     if f:
-                        self.goalWireframe = jsonpickle.decode(f.read())
-                        self.wireframeStack = [wireframeFromPreset(self.goalWireframe.preset)]
+                        self.loadLevel(f)
                     else:
                         print("No wireframe named " + name)
 
