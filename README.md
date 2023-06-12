@@ -2,13 +2,18 @@
 
 A unique and challenging puzzle game born from my passion for puzzle games and geometry. I created this purely for fun.
 
-To play the game, make sure you have **Python 3**, **jsonpickle**, **PyGame**, and **ModernGL** installed, and run `scripts\main.py`. Controls are listed at the bottom of this document.
+To play the game, make sure you have the following installed:
+- Python 3
+- jsonpickle
+- PyGame
+- ModernGL
+ Then, run `scripts\main.py`. You'll have a sample level ready to play. How to play and game controls are described below.
 
 ## Overview
 
-The goal of each level is to construct a specific wireframe shape out of a starting wireframe, using only the ability to create and delete edges between existing vertices. What gives these puzzles so much potential is that new vertices can be brought into existence by creating edges that intersect. These new vertices can then be used to make new edges.
+The goal of each level is to construct a specific wireframe (hold `TAB` to see it) shape from your starting wireframe, using only the ability to create and delete edges between existing vertices. What gives these puzzles so much potential is that new vertices can be brought into existence by creating edges that intersect. These new vertices can then be used to make new edges.
 
-The images below show an example of the start and finish of a level, the start being a regular dodecahedron (left) and the finish being a decagonal bipyramid (right):
+The images below show an example of the start and finish of a rather difficult level, the start being a regular dodecahedron (left) and the finish being a decagonal bipyramid (right):
 
 &nbsp;  
 
@@ -34,11 +39,11 @@ Some useful experience I gained in this project:
 ## Controls
 
 Basic controls:
-- Rotate the wireframe at a constant speed using `WASDQE`. Hold `LShift` for slow rotation. Alternatively, click and drag across the screen to rotate.
+- Rotate the wireframe at a constant speed using `WASDQE`. Hold `LShift/RShift` for slow rotation. Alternatively, click and drag across the screen to rotate.
 - Hold `TAB` to view your end goal.
 - Hold `1` to go into 'add edge' mode. Click two vertices, or drag from one vertex to another to create an edge between them.
 - Hold `2` to go into 'remove edge' mode. Click two vertices, or drag from one vertex to another to remove the edge between them.
-- Hold `4` to go into 'remove vertex' mode. Click a vertex to destroy all of its connected edges, or the vertex itself if it has no edges. NOTE: Unused vertices, not just unused edges, must be removed as well in order to 'win' a level.
+- Hold `3` to go into 'remove vertex' mode. Click a vertex to destroy all of its connected edges, or the vertex itself if it has no edges. NOTE: Unused vertices, not just unused edges, must be removed as well in order to 'win' a level.
 
 Commands (hold `LCtrl` and press):
 - `d`: Toggle whether edges in the back appear dimmer than the edges in the front
