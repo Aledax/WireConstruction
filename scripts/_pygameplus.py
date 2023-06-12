@@ -1,4 +1,4 @@
-import pygame, math, time
+import pygame, os, math, time
 from pygame.locals import *
 from pygame import gfxdraw
 from _resource import *

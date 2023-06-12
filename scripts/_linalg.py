@@ -129,4 +129,4 @@ def lerpAngle(a: float, a_dest: float, factor: float):
 # Other
 
 def lerpFloat(f: float, f_dest: float, factor: float):
-    return f + (f - f_dest) * factor
+    return f + (f_dest - f) * factor

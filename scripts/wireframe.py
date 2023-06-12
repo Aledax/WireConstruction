@@ -26,6 +26,8 @@ class Wireframe:
         # The lengths of vertices and vertexLinks should always be the same.
         # The lengths of edges and edgeLinks should always be the same.
 
+        self.preset = -1
+
         self.vertices = [] # Vertex Array
         self.edges = [] # Edge Array
 
@@ -307,4 +309,27 @@ presets = (
 numPresets = len(presets)
 
 def wireframeFromPreset(id):
-    return Wireframe(*copy.deepcopy(presets[id]))
+    w = Wireframe(*copy.deepcopy(presets[id]))
+    w.preset = id
+    return w
+
+def wireframeEquality(w1, w2):
+    if len(w1.vertices) != len(w2.vertices) or len(w1.edges) != len(w2.edges):
+        return False
+
+    vMappings = {}
+    for v1 in range(len(w1.vertices)):
+        found = False
+        for v2 in range(len(w2.vertices)):
+            if w1.vertices[v1].localPosition == w2.vertices[v2].localPosition:
+                vMappings[v1] = v2
+                found = True
+                break
+        if not found:
+            return False
+        
+    for e1 in range(len(w1.edges)):
+        if {vMappings[v] for v in w1.edgeLinks[e1]} not in w2.edgeLinks:
+            return False
+        
+    return True
