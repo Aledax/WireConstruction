@@ -2,7 +2,7 @@
 
 A unique and challenging puzzle game born from my passion for puzzle games and geometry. I created this purely for fun.
 
-To play the game, make sure you have Python 3, PyGame, and ModernGL installed, and run `scripts\main.py`. Controls are listed at the bottom of this document.
+To play the game, make sure you have **Python 3**, **jsonpickle**, **PyGame**, and **ModernGL** installed, and run `scripts\main.py`. Controls are listed at the bottom of this document.
 
 ## Overview
 
