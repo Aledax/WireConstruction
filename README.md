@@ -38,7 +38,7 @@ Basic controls:
 - Hold `TAB` to view your end goal.
 - Hold `1` to go into 'add edge' mode. Click two vertices, or drag from one vertex to another to create an edge between them.
 - Hold `2` to go into 'remove edge' mode. Click two vertices, or drag from one vertex to another to remove the edge between them.
-- Hold `4` to go into 'remove vertex' mode. Click a vertex to destroy it and all of its connected edges. NOTE: Unused vertices, not just unused edges, must be removed as well in order to 'win' a level.
+- Hold `4` to go into 'remove vertex' mode. Click a vertex to destroy all of its connected edges, or the vertex itself if it has no edges. NOTE: Unused vertices, not just unused edges, must be removed as well in order to 'win' a level.
 
 Commands (hold `LCtrl` and press):
 - `d`: Toggle whether edges in the back appear dimmer than the edges in the front
