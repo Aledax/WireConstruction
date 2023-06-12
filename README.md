@@ -7,7 +7,8 @@ To play the game, make sure you have the following installed:
 - jsonpickle
 - PyGame
 - ModernGL
- Then, run `scripts\main.py`. You'll have a sample level ready to play. How to play and game controls are described below.
+
+Then, run `scripts\main.py`. You'll have a sample level ready to play. How to play and game controls are described below.
 
 ## Overview
 
