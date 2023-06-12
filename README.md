@@ -2,7 +2,7 @@
 
 A unique and challenging puzzle game born from my passion for puzzle games and geometry. I created this purely for fun.
 
-To play the game, make sure you have Python 3, PyGame, and ModernGL installed, and run `main.py` from `0.9\scripts`. Controls are listed at the bottom of this document.
+To play the game, make sure you have **Python 3**, **jsonpickle**, **PyGame**, and **ModernGL** installed, and run `scripts\main.py`. Controls are listed at the bottom of this document.
 
 ## Overview
 
@@ -12,8 +12,8 @@ The images below show an example of the start and finish of a level, the start b
 
 &nbsp;  
 
-<img src="https://github.com/Aledax/WireConstruction/assets/89650652/335367e8-838f-4668-b08c-c307b205dc15" width="300" height="300">
-<img src="https://github.com/Aledax/WireConstruction/assets/89650652/a3376d1e-5006-4da3-acab-15bd793d02cc" width="300" height="300">
+<img src="https://github.com/Aledax/WireConstruction/assets/89650652/7d102db6-2969-4774-8dca-c8c77316b420" width="300" height="300">
+<img src="https://github.com/Aledax/WireConstruction/assets/89650652/90a4a217-d168-4bcc-89fa-9da723a326d2" width="300" height="300">
 
 &nbsp;  
 
@@ -31,8 +31,6 @@ Some useful experience I gained in this project:
 - Designing a responsive, intuitive, and visually pleasing UI
 - Designing satisfying sound effects with Audacity
 
-The """version control""" used for this repository is horrendous. I've learned my lesson since.
-
 ## Controls
 
 Basic controls:
@@ -40,7 +38,7 @@ Basic controls:
 - Hold `TAB` to view your end goal.
 - Hold `1` to go into 'add edge' mode. Click two vertices, or drag from one vertex to another to create an edge between them.
 - Hold `2` to go into 'remove edge' mode. Click two vertices, or drag from one vertex to another to remove the edge between them.
-- Hold `4` to go into 'remove vertex' mode. Click a vertex to destroy it and all of its connected edges. NOTE: Unused vertices must be removed in order to 'win' a level.
+- Hold `4` to go into 'remove vertex' mode. Click a vertex to destroy all of its connected edges, or the vertex itself if it has no edges. NOTE: Unused vertices, not just unused edges, must be removed as well in order to 'win' a level.
 
 Commands (hold `LCtrl` and press):
 - `d`: Toggle whether edges in the back appear dimmer than the edges in the front
@@ -49,5 +47,5 @@ Commands (hold `LCtrl` and press):
 - `r`: Reset the current level
 - `z`: Undo (up to 10 times)
 - `s`: Save what you currently have as a new level (enter name in command prompt)
-- `o`: Open an existing level (enter name in command prompt)
+- `o`: Open an existing level; levels created by me are in `resources\wireframes\custom`
 - `q`: Quit the application
