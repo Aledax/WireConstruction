@@ -65,9 +65,9 @@ KEY_GOAL = K_TAB
 
 KEY_ADDEDGE = K_1
 KEY_REMEDGE = K_2
-KEY_EDTEDGE = K_3
+KEY_REMVERTEX = K_3
 
-KEY_REMVERTEX = K_4
+KEY_EDTEDGE = K_0
 
 KEY_COMMAND = K_LCTRL
 
@@ -249,7 +249,7 @@ class App:
                 # Ignore conditions
                 if self.selectedV != -1:
                     if keys[KEY_ADDEDGE] and {self.selectedV, i} in wireframe.edgeLinks: continue
-                    elif (keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]) and {self.selectedV, i} not in wireframe.edgeLinks: continue
+                    elif (keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]) and {self.selectedV, i} not in wireframe.edgeLinks and self.selectedV != i: continue
 
                 # Calculate distance
                 ds = distanceSquared(screenVertices[i], mousePos)
@@ -383,6 +383,7 @@ class App:
                     self.panning = True
                 elif (keys[KEY_ADDEDGE] or keys[KEY_REMEDGE] or keys[KEY_EDTEDGE]) and self.selectedV == -1 and closestV != -1 and not keys[KEY_GOAL]:
                     self.selectedV = closestV
+                    self.dragSelect = True
                     self.clickVertexSound.play()
 
                 # for button in self.buttons:
