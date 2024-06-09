@@ -6,7 +6,7 @@ To play the game, make sure you have the following installed:
 - Python 3
 - jsonpickle
 - PyGame
-- ModernGL
+- ModernGL (This **MUST** be version 5.8.2. Later versions no longer work. Use `pip install moderngl==5.8.2`.)
 
 Then, run `scripts\main.py`. You'll have a sample level ready to play. How to play and game controls are described below.
 
